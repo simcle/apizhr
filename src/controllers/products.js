@@ -411,11 +411,11 @@ exports.updateProduct = async (req, res) => {
                         if(el._id) {
                             const product = await Products.findById(el._id)
                             
-                            // fs.readFileSync(product.imageVarian, (err, file) => {
-                            //     if(file) {
-                            //         fs.unlinkSync(product.imageVarian)
-                            //     }
-                            // })
+                            fs.readFileSync(product.imageVarian, (err, file) => {
+                                if(file) {
+                                    fs.unlinkSync(product.imageVarian)
+                                }
+                            })
                             // await Products.findByIdAndUpdate( el._id, {
                             //     name: productName, 
                             //     imageVarian: image.path,
