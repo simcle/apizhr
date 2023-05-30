@@ -385,14 +385,14 @@ exports.updateProduct = async (req, res) => {
                         }
                     })
                     
-                    // for(let i = 0; i < attributes[0].attrValues.length; i++) {
-                    //     const el = attributes[0].attrValues[i]
-                    //     if(imageVarians[i].mimetype !== 'text/html') {
-                    //         imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: imageVarians[i].filename})
-                    //     } else {
-                    //         imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: ''})
-                    //     }
-                    // }
+                    for(let i = 0; i < attributes[0].attrValues.length; i++) {
+                        const el = attributes[0].attrValues[i]
+                        if(imageVarians[i].mimetype !== 'text/html') {
+                            imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: imageVarians[i].filename})
+                        } else {
+                            imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: ''})
+                        }
+                    }
                     // let key = Object.keys(varians[0]);
                     // key = key[0]
                     // for (let i = 0; i < varians.length; i++) {
