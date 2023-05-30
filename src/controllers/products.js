@@ -344,19 +344,19 @@ exports.updateProduct = async (req, res) => {
                     fs.unlinkSync(`public/img/products/200/${img}`)
                 }
             }
-            // if(images) {
-            //     for await (const image of images) {
-            //         let filePath = `./public/img/products/700/${image.filename}`;
-            //         let filePathSmall = `./public/img/products/200/${image.filename}`;
-            //         await sharp(image.path)
-            //         .resize({height: 700})
-            //         .toFile(filePath);
-            //         await sharp(image.path)
-            //         .resize({height: 200})
-            //         .toFile(filePathSmall)
-            //         imagesList.push(image.filename)
-            //     }
-            // }
+            if(images) {
+                for await (const image of images) {
+                    let filePath = `./public/img/products/700/${image.filename}`;
+                    let filePathSmall = `./public/img/products/200/${image.filename}`;
+                    await sharp(image.path)
+                    .resize({height: 700})
+                    .toFile(filePath);
+                    await sharp(image.path)
+                    .resize({height: 200})
+                    .toFile(filePathSmall)
+                    imagesList.push(image.filename)
+                }
+            }
             // if(isVarian == 'true') {
             //     const attributes = JSON.parse(req.body.attributes)
             //     const imageVarians = req.files.imageVarians
