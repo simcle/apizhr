@@ -472,6 +472,7 @@ exports.updateProduct = async (req, res) => {
             //         res.status(200).json('OK');
             //     })
             // }
+            res.status(200).json(product)
         })
         
     } catch (error) {
