@@ -337,14 +337,13 @@ exports.updateProduct = async (req, res) => {
     try {
         Products.findById(req.params.productId)
         .then(async (product) => {
-            res.status(200).json(product)
-            // const oldImage = product.images
-            // for (const img of oldImage) {
-            //     if(fs.existsSync(`public/img/products/700/${img}`)) {
-            //         fs.unlinkSync(`public/img/products/700/${img}`)
-            //         fs.unlinkSync(`public/img/products/200/${img}`)
-            //     }
-            // }
+            const oldImage = product.images
+            for (const img of oldImage) {
+                if(fs.existsSync(`public/img/products/700/${img}`)) {
+                    fs.unlinkSync(`public/img/products/700/${img}`)
+                    fs.unlinkSync(`public/img/products/200/${img}`)
+                }
+            }
             // if(images) {
             //     for await (const image of images) {
             //         let filePath = `./public/img/products/700/${image.filename}`;
