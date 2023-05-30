@@ -412,6 +412,7 @@ exports.updateProduct = async (req, res) => {
                             const product = await Products.findById(el._id)
                             
                             fs.readFileSync(product.imageVarian, (err, file) => {
+                                console.log('hallo', err, file)
                                 if(file) {
                                     fs.unlinkSync(product.imageVarian)
                                 }
