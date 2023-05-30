@@ -52,6 +52,9 @@ router.post('/refresh-token', [
 
 // for user logout 
 router.delete('/logout', authController.UserLogout);
+router.post('/resetPassword/:token', authController.resetPassword);
+router.delete('/delete/:id', authenticateToken, authController.deleteUser);
+
 
 module.exports = router;
 

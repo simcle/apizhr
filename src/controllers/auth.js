@@ -6,16 +6,15 @@ const path = require('path');
 const fs = require('fs');
 
 const User = require('../models/users');
-const Shops = require('../models/shops')
 const tokenExpired = '1d'
 
 // get All User
 exports.getUsers = (req, res) => {
-    const shops = Shops.find().lean()
-    const users = User.aggregate([
+    User.aggregate([
+        {$match: {$and: [{isAdmin: false}, {isAuth: true}]}},
         {$lookup: {
             from: 'shops',
-            localField: 'shopId',
+            localField: 'employmentData.shopId',
             foreignField: '_id',
             as: 'shop'
         }},
@@ -33,21 +32,9 @@ exports.getUsers = (req, res) => {
             shop: 1,
             shopId: 1
         }}
-        
-    ])
-    Promise.all([
-        shops,
-        users
     ])
     .then(result => {
-        res.status(200).json({
-            shops: result[0].map(obj => {
-                obj.id = obj._id,
-                obj.text = obj.name
-                return obj
-            }),
-            users: result[1]
-        })
+        res.status(200).json(result)
     })
     .catch(err => {
         res.status(400).send(err)
@@ -73,40 +60,23 @@ exports.UserRegister = async (req, res) => {
     const name = req.body.name;
     const email = req.body.email;
     const password = req.body.password;
-    const shopId = req.body.shopId
     const role = req.body.role
-    
     const hashPassword = await bcrypt.hash(password, 10);
-    if(shopId) {
-        const register = new User({
-            name: name,
-            email: email,
-            shopId: shopId,
-            password: hashPassword,
-            role: role
-        })
-        register.save()
-        .then(() => {
-            res.status(201).send('Success');
-        })
-        .catch(err => {
-            res.status(400).send(err);
-        });
-    } else {
-        const register = new User({
-            name: name,
-            email: email,
-            password: hashPassword,
-            role: role
-        })
-        register.save()
-        .then(() => {
-            res.status(201).send('Success');
-        })
-        .catch(err => {
-            res.status(400).send(err);
-        });
-    }
+    const register = new User({
+        name: name,
+        email: email,
+        password: hashPassword,
+        role: role,
+        isAdmin: true,
+        isAuth: true
+    })
+    register.save()
+    .then(() => {
+        res.status(201).send('Success');
+    })
+    .catch(err => {
+        res.status(400).send(err);
+    });
 };
 
 // user login
@@ -120,34 +90,32 @@ exports.UserLogin = (req, res) => {
     const password = req.body.password;
 
     User.findOne({email: email})
-    .then(result => {
-        if(!result) {
-            return res.status(400).send('Email not found');
-        }
-        (async () => {
-            try {
-                if( await bcrypt.compare(password, result.password)) {
-                    const user = {_id: result._id}
-                    const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: tokenExpired})
-                    const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET)
-                    const data = {
-                        id: result._id,
-                        name: result.name,
-                        email: result.email,
-                        role: result.role,
-                        avatar: result.avatar,
-                    }
-                    result.refreshToken = refreshToken
-                    result.save();
-
-                    res.status(200).json({accessToken: accessToken, refreshToken: refreshToken, user: data});
-                } else {
-                    res.status(400).send('Wrong password');
-                }
-            } catch (error) {
-                res.status(400).send()
+    .then(async (result) => {
+        try {
+            if(!result) {
+                return res.status(400).send('Email not found');
             }
-        })();
+            if( await bcrypt.compare(password, result.password)) {
+                const user = {_id: result._id}
+                const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: tokenExpired})
+                const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET)
+                const data = {
+                    id: result._id,
+                    name: result.name,
+                    email: result.email,
+                    role: result.role,
+                    avatar: result.avatar,
+                }
+                result.refreshToken = refreshToken
+                result.save();
+
+                res.status(200).json({accessToken: accessToken, refreshToken: refreshToken, user: data});
+            } else {
+                res.status(400).send('Wrong password');
+            }
+        } catch (error) {
+            res.status(400).send()
+        }
     });
 };
 
@@ -224,6 +192,42 @@ exports.UserLogout = (req, res) => {
     })
     .catch (err => {
         res.status(400).send(err);
+    })
+}
+
+exports.resetPassword = async (req, res) => {
+    const token = req.params.token
+    const password = req.body.password
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, async (err, user) => {
+        if(err) return res.status(400).send(err)
+        const hashPassword = await bcrypt.hash(password, 10)
+        
+        User.findById(user.id)
+        .then(user => {
+            user.password = hashPassword
+            user.isAuth = true
+            user.role = user.employmentData.posisiPekerjaan
+            return user.save()
+        })
+        .then(() => {
+            res.status(200).json('OK')
+        })
+    })
+}
+
+exports.deleteUser = (req, res) => {
+    const id = req.params.id
+    User.findById(id)
+    .then(user => {
+        user.isAuth = false
+        user.password = ''
+        return user.save()
+    })
+    .then(result => {
+        res.status(200).json(result)
+    })
+    .catch(err => {
+        res.status(400).send(err)
     })
 }
 

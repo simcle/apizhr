@@ -8,6 +8,7 @@ const ProductSchema = new Schema({
     categoryId: {type: Schema.Types.ObjectId},
     brandId: {type: Schema.Types.ObjectId},
     isVarian: {type: Boolean},
+    isActive: {type: Boolean, default: true},
     images: {type: Array},
     imageVarian: {type: String},
     idx: {type: Number},
