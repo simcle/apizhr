@@ -385,73 +385,72 @@ exports.updateProduct = async (req, res) => {
                         }
                     })
                     
-                    for(let i = 0; i < attributes[0].attrValues.length; i++) {
-                        const el = attributes[0].attrValues[i]
-                        if(imageVarians[i].mimetype !== 'text/html') {
-                            imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: imageVarians[i].filename})
-                        } else {
-                            imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: ''})
-                        }
-                    }
-                    let key = Object.keys(varians[0]);
-                    key = key[0]
-                    for (let i = 0; i < varians.length; i++) {
-                        const el = varians[i]
-                        const keys = Object.keys(el)
-                        let names = []
-                        for(let key of keys) {
-                            if(key != 'purchase' && key != 'nettPrice' && key != 'price' && key != '_id') {
-                                names.push(key)
-                                names.push(el[key])
-                            }
-                        }
-                        let name = names.join(" ")
-                        let productName = req.body.name+' '+name
-                        let image = imagesVarianLists.find(obj => obj.value == el[key])
-                        if(el._id) {
-                            const product = await Products.findById(el._id)
-                            fs.readFile(product.imageVarian, (err, file) => {
-                                if(file) {
-                                    fs.unlinkSync(product.imageVarian)
-                                }
-                            })
-                            await Products.findByIdAndUpdate( el._id, {
-                                name: productName, 
-                                imageVarian: image.path,
-                                categoryId: req.body.categoryId,
-                                brandId: req.body.brandId,
-                                idx: i,
-                                purchase: el.purchase, 
-                                nettPrice: el.nettPrice, 
-                                price: el.price,
-                                description: req.body.description,
-                                weight: JSON.parse(req.body.weight),
-                                userUpdated: userId
-                            })
-                        } else {
-                            let sku = await generateSku()
-                            const product = new Products({
-                                name: productName,
-                                sku: sku,
-                                idx: i,
-                                imageVarian: image.path,
-                                parentId: result._id,
-                                categoryId: req.body.categoryId,
-                                brandId: req.body.brandId,
-                                purchase: el.purchase,
-                                nettPrice: el.nettPrice,
-                                price: el.price,
-                                description: req.body.description,
-                                weight: JSON.parse(req.body.weight),
-                                userCreated: userId
+                    // for(let i = 0; i < attributes[0].attrValues.length; i++) {
+                    //     const el = attributes[0].attrValues[i]
+                    //     if(imageVarians[i].mimetype !== 'text/html') {
+                    //         imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: imageVarians[i].filename})
+                    //     } else {
+                    //         imagesVarianLists.push({value: el.value, path: imageVarians[i].path, filename: ''})
+                    //     }
+                    // }
+                    // let key = Object.keys(varians[0]);
+                    // key = key[0]
+                    // for (let i = 0; i < varians.length; i++) {
+                    //     const el = varians[i]
+                    //     const keys = Object.keys(el)
+                    //     let names = []
+                    //     for(let key of keys) {
+                    //         if(key != 'purchase' && key != 'nettPrice' && key != 'price' && key != '_id') {
+                    //             names.push(key)
+                    //             names.push(el[key])
+                    //         }
+                    //     }
+                    //     let name = names.join(" ")
+                    //     let productName = req.body.name+' '+name
+                    //     let image = imagesVarianLists.find(obj => obj.value == el[key])
+                    //     if(el._id) {
+                    //         const product = await Products.findById(el._id)
+                    //         fs.readFile(product.imageVarian, (err, file) => {
+                    //             if(file) {
+                    //                 fs.unlinkSync(product.imageVarian)
+                    //             }
+                    //         })
+                    //         await Products.findByIdAndUpdate( el._id, {
+                    //             name: productName, 
+                    //             imageVarian: image.path,
+                    //             categoryId: req.body.categoryId,
+                    //             brandId: req.body.brandId,
+                    //             idx: i,
+                    //             purchase: el.purchase, 
+                    //             nettPrice: el.nettPrice, 
+                    //             price: el.price,
+                    //             description: req.body.description,
+                    //             weight: JSON.parse(req.body.weight),
+                    //             userUpdated: userId
+                    //         })
+                    //     } else {
+                    //         let sku = await generateSku()
+                    //         const product = new Products({
+                    //             name: productName,
+                    //             sku: sku,
+                    //             idx: i,
+                    //             imageVarian: image.path,
+                    //             parentId: result._id,
+                    //             categoryId: req.body.categoryId,
+                    //             brandId: req.body.brandId,
+                    //             purchase: el.purchase,
+                    //             nettPrice: el.nettPrice,
+                    //             price: el.price,
+                    //             description: req.body.description,
+                    //             weight: JSON.parse(req.body.weight),
+                    //             userCreated: userId
 
-                            })
-                            await product.save()
-                        }
-                    }
+                    //         })
+                    //         await product.save()
+                    //     }
+                    // }
                     res.status(200).json('OK')
                 })
-                
             } else {
                 product.name = req.body.name
                 product.categoryId = req.body.categoryId
@@ -474,7 +473,6 @@ exports.updateProduct = async (req, res) => {
                 })
             }
         })
-        
     } catch (error) {
         res.status(400).send(error)
     }
