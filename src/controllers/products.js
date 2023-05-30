@@ -410,26 +410,22 @@ exports.updateProduct = async (req, res) => {
                         let image = imagesVarianLists.find(obj => obj.value == el[key])
                         if(el._id) {
                             const product = await Products.findById(el._id)
-                            
-                            fs.readFileSync(product.imageVarian, (err, file) => {
-                                console.log('hallo', err, file)
-                                if(file) {
-                                    fs.unlinkSync(product.imageVarian)
-                                }
+                            if(fs.existsSync(product.imageVarian)) {
+                                fs.unlinkSync(product.imageVarian)
+                            }
+                            await Products.findByIdAndUpdate( el._id, {
+                                name: productName, 
+                                imageVarian: image.path,
+                                categoryId: req.body.categoryId,
+                                brandId: req.body.brandId,
+                                idx: i,
+                                purchase: el.purchase, 
+                                nettPrice: el.nettPrice, 
+                                price: el.price,
+                                description: req.body.description,
+                                weight: JSON.parse(req.body.weight),
+                                userUpdated: userId
                             })
-                            // await Products.findByIdAndUpdate( el._id, {
-                            //     name: productName, 
-                            //     imageVarian: image.path,
-                            //     categoryId: req.body.categoryId,
-                            //     brandId: req.body.brandId,
-                            //     idx: i,
-                            //     purchase: el.purchase, 
-                            //     nettPrice: el.nettPrice, 
-                            //     price: el.price,
-                            //     description: req.body.description,
-                            //     weight: JSON.parse(req.body.weight),
-                            //     userUpdated: userId
-                            // })
                         } else {
                             let sku = await generateSku()
                             const product = new Products({
