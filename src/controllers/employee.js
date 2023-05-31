@@ -174,7 +174,10 @@ exports.updateEmployee = (req, res) => {
         return emp.save()
     })
     .then (result => {
-        res.status(200).json(result)
+        fingerspot.setUserInfo(result)
+        .then(()  => {
+            res.status(200).json(result)
+        })
     })
     .catch(err => {
         res.status(400).send(err)

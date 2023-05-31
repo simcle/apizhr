@@ -29,7 +29,8 @@ const UserSchema = new Schema({
         tanggalKeluar: {type: Date},
     },
     payroll: {
-        gajiPokok: {type: Number}
+        gajiPokok: {type: Number},
+        bonusSales: {type: Number}
     },
     role: {type: String},
     avatar: {type: String, default: null},

@@ -49,10 +49,12 @@ const uploadUpdate = multer({storage: updateFileStorage});
 const productController = require('../controllers/products');
 
 router.get('/', productController.getAllProducts);
+router.get('/filter', productController.getFilter);
 router.get('/detail/:productId', productController.getDetail)
 router.get('/create', productController.createProduct)
 router.post('/create', upload.fields([{name: 'images'}, {name: 'imageVarians'}]), productController.postProduct)
 router.get('/edit/:productId', productController.editProduct);
 router.put('/update/:productId', uploadUpdate.fields([{name: 'images'}, {name: 'imageVarians'}]), productController.updateProduct);
+router.put('/is-active/:productId', productController.putIsActive);
 
 module.exports = router;

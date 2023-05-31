@@ -49,7 +49,7 @@ exports.getAttlogs = (req, res) => {
             keterangan: 1,
             shop: 1,
         }},
-        {$sort: {scanIn: -1}}
+        {$sort: {scanIn: 1}}
     ])
     .then(result => {
         res.status(200).json(result)

@@ -5,19 +5,118 @@ const mongoose = require('mongoose');
 const sharp = require('sharp');
 const fs = require('fs');
 
+exports.getFilter = (req, res) => {
+    const products = Products.aggregate([
+        {$group: {
+            _id: null,
+            allProducts: {$sum: 1},
+            active: {$sum: {$cond: [{$eq: ['$isActive',true]}, 1, 0]}},
+            inactive: {$sum: {$cond: [{$eq: ['$isActive',false]}, 1, 0]}},
+        }},
+        {$project: {
+            _id: 0
+        }}
+    ])
+    const categories = Categories.find()
+    const brands = Brands.find()
+    Promise.all([
+        categories,
+        brands,
+        products
+    ])
+    .then(result => {
+        res.status(200).json({
+            categories: result[0],
+            brands: result[1],
+            products: result[2][0]
+        })
+    })
+}
+
+
 exports.getAllProducts = (req, res) => {
     const search = req.query.search
     const currentPage = req.query.page || 1
     const perPage = req.query.perPage || 20
+    const brands = req.query.brands
+    const categories = req.query.categories
+    let brandIds;
+    let categoryIds;
+    if(brands) { 
+        const brandObjectId = [];
+        for(let i = 0; i < brands.length; i++) {
+            brandObjectId.push(mongoose.Types.ObjectId(brands[i]))
+        }
+        brandIds = {brandId: {$in: brandObjectId}}
+    } else {
+        brandIds = {}
+    }
+    if(categories) {
+        const categoryObjectId = [];
+        for (let i = 0; i < categories.length; i++) {
+            categoryObjectId.push(mongoose.Types.ObjectId(categories[i]))
+        }
+        categoryIds = {categoryId: {$in: categoryObjectId}}
+    } else {
+        categoryIds = {}
+    }
+    const boolStatus = []
+    for(let i = 0; i < req.query.status.length; i++) {
+        const el = req.query.status[i]
+        if(el == 'true') {
+            boolStatus.push(true)
+        } else {
+            boolStatus.push(false)
+        }
+    }
+    const status = {isActive: {$in: boolStatus}}
     let totalItems;
-    Products.find({$and: [{sku: {$exists: true}}, {$or: [{name: {$regex: '.*'+search+'.*', $options: 'i'}}, {sku: {$regex: '.*'+search+'.*', $options: 'i'}}]}]})
+    Products.find({$and: [{sku: {$exists: true}}, {$or: [{name: {$regex: '.*'+search+'.*', $options: 'i'}}, {sku: {$regex: '.*'+search+'.*', $options: 'i'}}]}, brandIds, categoryIds, status]})
     .countDocuments()
     .then(count => {
         totalItems = count
-        return Products.find({$and: [{sku: {$exists: true}}, {$or: [{name: {$regex: '.*'+search+'.*', $options: 'i'}}, {sku: {$regex: '.*'+search+'.*', $options: 'i'}}]}]})
-        .skip((currentPage -1) * perPage)
-        .limit(perPage)
-        .sort({createdAt: '-1'})
+        return Products.aggregate([
+            {$match: {$and: [{sku: {$exists: true}}, {$or: [{name: {$regex: '.*'+search+'.*', $options: 'i'}}, {sku: {$regex: '.*'+search+'.*', $options: 'i'}}]}, brandIds, categoryIds, status]}},
+            {$lookup: {
+                from: 'categories',
+                localField: 'categoryId',
+                foreignField: '_id',
+                as: 'categories'
+            }},
+            {$unwind: {
+                path: '$categories',
+                preserveNullAndEmptyArrays: true
+            }},
+            {$lookup: {
+                from: 'brands',
+                localField: 'brandId',
+                foreignField: '_id',
+                as: 'brands'
+            }},
+            {$unwind: {
+                path: '$brands',
+                preserveNullAndEmptyArrays: true
+            }},
+            {$addFields: {
+                category: '$categories.name',
+                brand: '$brands.name'
+            }},
+            {$project: {
+                name: 1,
+                brand: 1,
+                brandId: 1,
+                categoryId: 1,
+                category: 1,
+                sku: 1,
+                price: 1,
+                stock: 1,
+                isActive: 1,
+                createdAt: 1
+            }},
+            {$sort: {createdAt: -1}},
+            {$skip: (currentPage -1) * perPage},
+            {$limit: perPage},
+        ])
     })
     .then(result => {
         const last_page = Math.ceil(totalItems / perPage)
@@ -474,5 +573,12 @@ exports.updateProduct = async (req, res) => {
     } catch (error) {
         res.status(400).send(error)
     }
-    
+}
+
+exports.putIsActive = async (req, res) => {
+    const productId = req.params.productId
+    Products.findByIdAndUpdate(productId, {isActive: req.body.isActive})
+    .then(() => {
+        res.status(200).json('OK')
+    })
 }

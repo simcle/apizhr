@@ -1,6 +1,6 @@
 const axios = require('axios');
-const token = '059MOME6AOWBLOIQ'
-const cloud_id = 'C26258105B322B31'
+const token = 'JZNFMT26IQGI8PDU'
+const cloud_id = 'C2622D141F382027'
 axios.defaults.baseURL = 'https://developer.fingerspot.io/api/'
 axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
@@ -13,7 +13,7 @@ exports.setUserInfo = (body) => {
             name: body.name,
             privilege: 1,
             password: '',
-            template: ''
+            template: body.template
         }
     }
     return axios.post('/set_userinfo', data)
