@@ -1,4 +1,7 @@
 require('dotenv').config();
+
+process.env.TZ= 'Asia/Jakarta'
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -25,7 +28,6 @@ const attlogsRouters = require('./src/routers/attlogs');
 const brandRoutes = require('./src/routers/brand');
 const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
-
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
 app.use('/setting', authenticateToken, companyRouters);
