@@ -7,6 +7,7 @@ const fs = require('fs');
 
 exports.getFilter = (req, res) => {
     const products = Products.aggregate([
+        {$match: {sku: {$exists: true}}},
         {$group: {
             _id: null,
             allProducts: {$sum: 1},
