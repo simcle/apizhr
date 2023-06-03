@@ -10,6 +10,9 @@ const sendEmail = async (data) => {
           pass: '&*]qCsWn*Bou', // generated ethereal password
         },
     });
+    transporter.verify(function(error, success) {
+      console.log(error, success)
+    })
     return await transporter.sendMail(data)
 }
 

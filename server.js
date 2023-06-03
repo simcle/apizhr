@@ -28,6 +28,8 @@ const attlogsRouters = require('./src/routers/attlogs');
 const brandRoutes = require('./src/routers/brand');
 const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
+const stockopnameRoutes = require('./src/routers/stockopname');
+
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
 app.use('/setting', authenticateToken, companyRouters);
@@ -40,6 +42,7 @@ app.use('/attlog', authenticateToken, attlogsRouters);
 app.use('/brands', authenticateToken, brandRoutes);
 app.use('/categories', authenticateToken, categoryRoutes );
 app.use('/products', authenticateToken, productRoutes)
+app.use('/stockopname', authenticateToken, stockopnameRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
