@@ -93,7 +93,7 @@ exports.getStats = (req, res) => {
     Attlogs.aggregate([
         {$group: {
             _id: '$userPin',
-            tanpaKeterangan: {$sum: {$cond: [{$eq: ['$information','Tanpa Keterangan']}, 1, 0]}},
+            tanpaKeterangan: {$sum: {$cond: [{$eq: ['$information','Tanpa keterangan']}, 1, 0]}},
             izin: {$sum: {$cond: [{$eq: ['$information','Izin']}, 1, 0]}},
             sakit: {$sum: {$cond: [{$eq: ['$information','Sakit']}, 1, 0]}},
             libur: {$sum: {$cond: [{$eq: ['$information','Libur']}, 1, 0]}},
