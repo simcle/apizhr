@@ -5,6 +5,43 @@ const mongoose = require('mongoose');
 const sharp = require('sharp');
 const fs = require('fs');
 
+exports.getProductBySku = (req, res) => {
+    const shopId = req.user.shopId
+    const sku = req.query.sku
+    Products.aggregate([
+        {$match: {$and: [{sku: {$exists: true}}, {sku: sku}]}},
+        {$lookup: {
+            from: 'inventories',
+            localField: '_id',
+            foreignField: 'productId',
+            pipeline: [
+                {$match: {shopId: shopId}}
+            ],
+            as: 'inventories'
+        }},
+        {$unwind: {
+            path: '$inventories',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            onHand: '$inventories.qty'
+        }},
+        {$project: {
+            name: 1,
+            sku: 1,
+            purchase: 1,
+            nettPrice: 1,
+            price: 1,
+            onHand: 1
+        }}
+    ])
+    .then(product => {
+        res.status(200).json(product[0])
+    })
+
+}
+
+
 exports.getFilter = (req, res) => {
     const products = Products.aggregate([
         {$match: {sku: {$exists: true}}},

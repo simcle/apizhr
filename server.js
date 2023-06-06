@@ -46,7 +46,9 @@ app.use('/stockopname', authenticateToken, stockopnameRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
-mongoose.connect(process.env.DATA_BASE)
+mongoose.connect(process.env.DATA_BASE, {
+    autoIndex: true
+})
 .then(() => {
     app.listen(PORT, () => console.log(`Server listen on port ${PORT}`));
 });

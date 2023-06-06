@@ -89,11 +89,11 @@ exports.UserLogin = (req, res) => {
     const email = req.body.email;
     const password = req.body.password;
 
-    User.findOne({email: email})
+    User.findOne({$and: [{email: email}, {isAuth: true}]})
     .then(async (result) => {
         try {
             if(!result) {
-                return res.status(400).send('Email not found');
+                return res.status(400).send('Akun tidak ditemukan');
             }
             if( await bcrypt.compare(password, result.password)) {
                 const user = {_id: result._id, shopId: result.employmentData.shopId}

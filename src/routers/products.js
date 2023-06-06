@@ -56,5 +56,7 @@ router.post('/create', upload.fields([{name: 'images'}, {name: 'imageVarians'}])
 router.get('/edit/:productId', productController.editProduct);
 router.put('/update/:productId', uploadUpdate.fields([{name: 'images'}, {name: 'imageVarians'}]), productController.updateProduct);
 router.put('/is-active/:productId', productController.putIsActive);
+router.get('/sku', productController.getProductBySku);
+
 
 module.exports = router;
