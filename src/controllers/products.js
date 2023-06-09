@@ -41,7 +41,6 @@ exports.getProductBySku = (req, res) => {
 
 }
 
-
 exports.getFilter = (req, res) => {
     const products = Products.aggregate([
         {$match: {sku: {$exists: true}}},
@@ -338,33 +337,6 @@ exports.postProduct = async (req, res) => {
     }
 }
 
-async function generateSku () {
-    let product =  await Products.findOne({sku: {$exists: true}}).sort({createdAt: -1})
-    let sku;
-    if(product) {
-        let no = parseInt(product.sku)
-        no++
-        no = checkKode(no)
-        function checkKode (i) {
-            if(i < 10) {
-                return `000${i}`
-            }
-            if(i < 100) {
-                return `00${i}`
-            }
-            if(i < 1000) {
-                return `0${i}`
-            } 
-            if( i >= 1000) {
-                return i
-            }
-        }
-        sku = no
-    } else {
-        sku = `0001`
-    }
-    return sku
-}
 
 // CREATE PRODUCT
 exports.createProduct = (req, res) => {
@@ -619,4 +591,35 @@ exports.putIsActive = async (req, res) => {
     .then(() => {
         res.status(200).json('OK')
     })
+}
+
+async function generateSku () {
+    let product =  await Products.findOne({sku: {$exists: true}}).sort({createdAt: -1})
+    let sku;
+    if(product) {
+        let no = parseInt(product.sku)
+        no++
+        no = checkKode(no)
+        function checkKode (i) {
+            if(i < 10) {
+                return `0000${i}`
+            }
+            if(i < 100) {
+                return `900${i}`
+            }
+            if(i < 1000) {
+                return `00${i}`
+            } 
+            if(i < 10000) {
+                return `0${i}`
+            } 
+            if( i >= 10000) {
+                return i
+            }
+        }
+        sku = no
+    } else {
+        sku = `00001`
+    }
+    return sku
 }

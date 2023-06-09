@@ -1,6 +1,14 @@
 const Shops = require('../models/shops');
 
 
+exports.getShopById = (req, res) => {
+    const shopId = req.user.shopId
+    Shops.findById(shopId)
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
 exports.getShops = (req, res) => {
     Shops.find()
     .then(result => {
