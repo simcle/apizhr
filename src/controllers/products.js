@@ -605,7 +605,7 @@ async function generateSku () {
                 return `0000${i}`
             }
             if(i < 100) {
-                return `900${i}`
+                return `000${i}`
             }
             if(i < 1000) {
                 return `00${i}`
