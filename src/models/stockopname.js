@@ -4,6 +4,7 @@ const Schema = mongoose.Schema;
 const StockOpnameSchmea = new Schema({
     stockOpnameNumber: {type: String},
     shopId: {type: Schema.Types.ObjectId},
+    remarks: {type: String, default: 'Stock opname'},
     items: [
         {
             productId: {type: Schema.Types.ObjectId},

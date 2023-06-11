@@ -29,6 +29,7 @@ const brandRoutes = require('./src/routers/brand');
 const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
 const stockopnameRoutes = require('./src/routers/stockopname');
+const salesRoutes = require('./src/routers/sales');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -43,6 +44,7 @@ app.use('/brands', authenticateToken, brandRoutes);
 app.use('/categories', authenticateToken, categoryRoutes );
 app.use('/products', authenticateToken, productRoutes)
 app.use('/stockopname', authenticateToken, stockopnameRoutes);
+app.use('/sales', authenticateToken, salesRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
