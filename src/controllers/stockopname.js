@@ -148,6 +148,7 @@ exports.getDetail = (req, res) => {
                 {$project: {
                     _id: 0,
                     name: 1,
+                    sku: 1
                 }},
             ],
             as: 'items.product'
@@ -155,6 +156,7 @@ exports.getDetail = (req, res) => {
         {$unwind: '$items.product'},
         {$addFields: {
             'items.name': '$items.product.name',
+            'items.sku': '$items.product.sku'
         }},
         {$unset: 'items.product'},
         {$group: {

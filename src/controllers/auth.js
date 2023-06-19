@@ -173,7 +173,7 @@ exports.RefreshToken = (req, res) => {
         if (!result) return res.sendStatus(403);
         jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
             if(err) return res.sendStatus(403);
-            const accessToken = jwt.sign({_id: user._id}, process.env.ACCESS_TOKEN_SECRET, {expiresIn: tokenExpired});
+            const accessToken = jwt.sign({_id: user._id, shopId: user.shopId}, process.env.ACCESS_TOKEN_SECRET, {expiresIn: tokenExpired});
             res.json({accessToken: accessToken});
         })
     })

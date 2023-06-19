@@ -30,6 +30,12 @@ const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
 const stockopnameRoutes = require('./src/routers/stockopname');
 const salesRoutes = require('./src/routers/sales');
+const ngolesRoutes = require('./src/routers/ngoles');
+const resellerRoutes = require('./src/routers/reseller');
+const pengeluaranRoutes = require('./src/routers/pengeluaran');
+const posRoutes = require('./src/routers/pos');
+const transferRoutes = require('./src/routers/transfer');
+const stockCardRoutes = require('./src/routers/stockCard');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -45,6 +51,12 @@ app.use('/categories', authenticateToken, categoryRoutes );
 app.use('/products', authenticateToken, productRoutes)
 app.use('/stockopname', authenticateToken, stockopnameRoutes);
 app.use('/sales', authenticateToken, salesRoutes);
+app.use('/ngoles', authenticateToken, ngolesRoutes);
+app.use('/reseller', authenticateToken, resellerRoutes);
+app.use('/pengeluaran', authenticateToken, pengeluaranRoutes);
+app.use('/pos', authenticateToken, posRoutes);
+app.use('/transfer', authenticateToken, transferRoutes);
+app.use('/stockcard', authenticateToken, stockCardRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);

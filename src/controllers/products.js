@@ -6,7 +6,7 @@ const sharp = require('sharp');
 const fs = require('fs');
 
 exports.getProductBySku = (req, res) => {
-    const shopId = req.user.shopId
+    const shopId = mongoose.Types.ObjectId(req.user.shopId)
     const sku = req.query.sku
     Products.aggregate([
         {$match: {$and: [{sku: {$exists: true}}, {sku: sku}]}},
@@ -215,6 +215,7 @@ exports.getDetail = (req, res) => {
         })
     })
 }
+
 
 // POST NEW PRODUCT
 exports.postProduct = async (req, res) => {
