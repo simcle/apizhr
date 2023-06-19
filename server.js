@@ -36,6 +36,7 @@ const pengeluaranRoutes = require('./src/routers/pengeluaran');
 const posRoutes = require('./src/routers/pos');
 const transferRoutes = require('./src/routers/transfer');
 const stockCardRoutes = require('./src/routers/stockCard');
+const inventoryRoutes = require('./src/routers/inventory');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -57,6 +58,7 @@ app.use('/pengeluaran', authenticateToken, pengeluaranRoutes);
 app.use('/pos', authenticateToken, posRoutes);
 app.use('/transfer', authenticateToken, transferRoutes);
 app.use('/stockcard', authenticateToken, stockCardRoutes);
+app.use('/inventory', authenticateToken, inventoryRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
