@@ -164,12 +164,14 @@ exports.updateEmployee = (req, res) => {
     const id = req.params.id
     UserModel.findById(id)
     .then(emp => {
+        const role = req.body.employmentData.posisiPekerjaan
         emp.name = req.body.name
         emp.email = req.body.email
         emp.phone = req.body.phone
         emp.personalData = req.body.personalData
         emp.employmentData = req.body.employmentData
         emp.payroll = req.body.payroll
+        emp.role = role
 
         return emp.save()
     })
