@@ -8,7 +8,7 @@ exports.getStat = (req, res) => {
     const shopId = mongoose.Types.ObjectId(req.user.shopId)
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const sevenDay = new Date(new Date() - 7 * 60 * 60 * 24 * 1000)
+    const sevenDay = new Date(new Date() - 6 * 60 * 60 * 24 * 1000)
     const omzet = SalesModel.aggregate([
         {$match: {$and: [{createdAt: {$gte: today}}, {shopId: shopId}]}},
         {$group: {

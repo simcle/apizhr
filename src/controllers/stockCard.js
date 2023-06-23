@@ -4,6 +4,7 @@ const SalesModel = require('../models/sales');
 const NgolesModel = require('../models/ngoles');
 const ResellerModel = require('../models/reseller');
 const TransferModel = require('../models/transfer');
+const ReceiptsModel = require('../models/receipts');
 const StockCardModle = require('../models/stockCard');
 
 exports.getStockCard = (req, res) => {
@@ -70,7 +71,12 @@ exports.getStockCard = (req, res) => {
                     stockCard[i].document = doc.transferNo
                 }
             }
-
+            if(el == 'Receipts') {
+                doc = await ReceiptsModel.findById(documentId)
+                if(doc) {
+                    stockCard[i].document = doc.receiptsNo
+                }
+            }
         }
         res.status(200).json({
             stockCards: stockCard,

@@ -624,3 +624,26 @@ async function generateSku () {
     }
     return sku
 }
+
+exports.printBarcode = (req, res) => {
+    const sku = req.query.sku
+    Products.aggregate([
+        {$match: {$and: [{sku: {$exists: true}}, {sku: sku}]}},
+        {$lookup: {
+            from: 'products',
+            foreignField: '_id',
+            localField: 'parentId',
+            as: 'parent'
+        }},
+        {$unwind: {
+            path: '$parent',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            parent: '$parent.name'
+        }}
+    ])
+    .then(result => {
+        res.status(200).json(result[0])
+    })
+}

@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 process.env.TZ= 'Asia/Jakarta'
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -18,6 +17,7 @@ const authenticateToken = require('./authenticate');
 
 const webhookRouters = require('./src/routers/webhook');
 const userRoutes = require('./src/routers/auth');
+const dashboardRoutes = require('./src/routers/dashboard');
 const companyRouters = require('./src/routers/company');
 const shippingRoutes = require('./src/routers/shipping');
 const shopRoutes = require('./src/routers/shops');
@@ -25,6 +25,7 @@ const marketplaceRoutes = require('./src/routers/marketplaces');
 const bankRoutes = require('./src/routers/banks');
 const employeeRoutes = require('./src/routers/employee');
 const attlogsRouters = require('./src/routers/attlogs');
+const supplierRoutes = require('./src/routers/supplier');
 const brandRoutes = require('./src/routers/brand');
 const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
@@ -34,12 +35,14 @@ const ngolesRoutes = require('./src/routers/ngoles');
 const resellerRoutes = require('./src/routers/reseller');
 const pengeluaranRoutes = require('./src/routers/pengeluaran');
 const posRoutes = require('./src/routers/pos');
+const receiptsRoutes = require('./src/routers/receipts');
 const transferRoutes = require('./src/routers/transfer');
 const stockCardRoutes = require('./src/routers/stockCard');
 const inventoryRoutes = require('./src/routers/inventory');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
+app.use('/dashboard', authenticateToken, dashboardRoutes);
 app.use('/setting', authenticateToken, companyRouters);
 app.use('/setting', authenticateToken, shippingRoutes);
 app.use('/setting', authenticateToken, bankRoutes);
@@ -47,6 +50,7 @@ app.use('/setting', authenticateToken, shopRoutes);
 app.use('/setting', authenticateToken, marketplaceRoutes);
 app.use('/employee', authenticateToken, employeeRoutes);
 app.use('/attlog', authenticateToken, attlogsRouters);
+app.use('/supplier', authenticateToken, supplierRoutes);
 app.use('/brands', authenticateToken, brandRoutes);
 app.use('/categories', authenticateToken, categoryRoutes );
 app.use('/products', authenticateToken, productRoutes)
@@ -56,6 +60,7 @@ app.use('/ngoles', authenticateToken, ngolesRoutes);
 app.use('/reseller', authenticateToken, resellerRoutes);
 app.use('/pengeluaran', authenticateToken, pengeluaranRoutes);
 app.use('/pos', authenticateToken, posRoutes);
+app.use('/receipts', authenticateToken, receiptsRoutes);
 app.use('/transfer', authenticateToken, transferRoutes);
 app.use('/stockcard', authenticateToken, stockCardRoutes);
 app.use('/inventory', authenticateToken, inventoryRoutes);
