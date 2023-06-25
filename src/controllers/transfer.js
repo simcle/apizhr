@@ -215,7 +215,7 @@ exports.insertTransfer = async (req, res) => {
                 fromInventory.qty = fromInventory.qty - item.qty
                 await fromInventory.save()
             } else {
-                await InventoryModel.create({shopId: fromId, productId: item.productId, qty: item.qty})
+                await InventoryModel.create({shopId: fromId, productId: item.productId, qty: 0})
             }
             const fromBalance = await updateStock(item.productId)
             await stockCard('out', fromId, item.productId, documentId, 'Transfer', item.qty, fromBalance.stock)
@@ -226,7 +226,7 @@ exports.insertTransfer = async (req, res) => {
                 toInventory.qty = toInventory.qty + item.qty
                 await toInventory.save()
             } else {
-                await InventoryModel.create({shopId: toId, productId: item.productId, qty: item.qty})
+                await InventoryModel.create({shopId: toId, productId: item.productId, qty: 0})
             }
             const toBalance = await updateStock(item.productId)
             await stockCard('in', toId, item.productId, documentId, 'Receive', item.qty, toBalance.stock)
