@@ -39,6 +39,10 @@ const receiptsRoutes = require('./src/routers/receipts');
 const transferRoutes = require('./src/routers/transfer');
 const stockCardRoutes = require('./src/routers/stockCard');
 const inventoryRoutes = require('./src/routers/inventory');
+const indonesiaRoutes = require('./src/routers/indonesia');
+const customerRoutes = require('./src/routers/customer');
+const onlineRoutes = require('./src/routers/online');
+const rajaongkirRoutes = require('./src/routers/rajaongkir');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -64,6 +68,10 @@ app.use('/receipts', authenticateToken, receiptsRoutes);
 app.use('/transfer', authenticateToken, transferRoutes);
 app.use('/stockcard', authenticateToken, stockCardRoutes);
 app.use('/inventory', authenticateToken, inventoryRoutes);
+app.use('/indonesia', authenticateToken, indonesiaRoutes);
+app.use('/customer', authenticateToken, customerRoutes);
+app.use('/online', authenticateToken, onlineRoutes);
+app.use('/rajaongkir', authenticateToken, rajaongkirRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
