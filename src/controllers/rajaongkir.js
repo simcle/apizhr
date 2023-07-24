@@ -1,7 +1,7 @@
 const axios = require('axios');
-axios.defaults.baseURL = 'https://pro.rajaongkir.com/api/'
-axios.defaults.headers.common['key'] = '7df812cc8d843302214c45f8553999c1'
-axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
+// axios.defaults.baseURL = 'https://pro.rajaongkir.com/api/'
+// axios.defaults.headers.common['key'] = '7df812cc8d843302214c45f8553999c1'
+// axios.defaults.headers.post['Content-Type'] = 'application/x-www-form-urlencoded';
 
 exports.cekOngkir = (req, res) => {
 
