@@ -9,6 +9,7 @@ exports.searchItems = (req, res) => {
     let search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     Products.find({$and: [{sku: {$exists: true}}, {$text: {$search: queryString}}]})
+    .limit(10)
     .then(result => {
         res.status(200).json(result)
     })
