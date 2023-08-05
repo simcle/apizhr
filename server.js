@@ -43,6 +43,7 @@ const indonesiaRoutes = require('./src/routers/indonesia');
 const customerRoutes = require('./src/routers/customer');
 const onlineRoutes = require('./src/routers/online');
 const rajaongkirRoutes = require('./src/routers/rajaongkir');
+const biteshipRoutes = require('./src/routers/biteship');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -72,6 +73,7 @@ app.use('/indonesia', authenticateToken, indonesiaRoutes);
 app.use('/customer', authenticateToken, customerRoutes);
 app.use('/online', authenticateToken, onlineRoutes);
 app.use('/rajaongkir', authenticateToken, rajaongkirRoutes);
+app.use('/biteship', authenticateToken, biteshipRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
