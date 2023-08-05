@@ -58,6 +58,6 @@ router.put('/update/:productId', uploadUpdate.fields([{name: 'images'}, {name: '
 router.put('/is-active/:productId', productController.putIsActive);
 router.get('/sku', productController.getProductBySku);
 router.get('/barcode', productController.printBarcode);
-
+router.get('/search', productController.searchItems);
 
 module.exports = router;
