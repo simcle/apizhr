@@ -230,3 +230,10 @@ exports.activeEmployee = (req, res) => {
         res.status(400).send(err)
     })
 }
+
+exports.employeeTransfer = async (req, res) => {
+    const id = req.body._id
+    const shopId = req.body.shopTo
+    await UserModel.updateOne({_id: id}, {'employmentData.shopId': shopId})
+    res.status(200).json('OK')
+}

@@ -13,5 +13,6 @@ router.put('/update/:id', employeeController.updateEmployee);
 router.post('/fingerprint', employeeController.fingerPrint);
 router.post('/resign', employeeController.resignEmployee);
 router.post('/active', employeeController.activeEmployee);
+router.put('/transfer', employeeController.employeeTransfer);
 
 module.exports = router;
