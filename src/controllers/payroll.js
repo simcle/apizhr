@@ -1,7 +1,9 @@
 const AttlogsModel = require('../models/attlog');
 
 exports.getPayroll = (req, res) => {
-    const day = new Date(new Date() - 7 * 60 * 60 * 24 * 1000)
+    let day = new Date()
+    day.setDate(day.getDate() - 6)
+    day.setHours(0,0,0,0)
     AttlogsModel.aggregate([
         {$match: {$and:[{scanDate: {$gte: day}}, {scanIn: {$ne: null}}]}},
         {$lookup: {
