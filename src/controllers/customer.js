@@ -82,6 +82,28 @@ exports.insertCustomer = (req, res) => {
     })
 }
 
+exports.updateCustomer = (req, res) => {
+    CustomerModel.findById(req.body._id)
+    .then(customer => {
+        customer.name = req.body.name
+        customer.marketplaceId = req.body.marketplaceId
+        customer.mobile = req.body.mobile
+        customer.address = req.body.address
+        customer.subdistrictId = req.body.subdistrictId
+        customer.subdistrictName = req.body.subdistrictName
+        customer.cityId = req.body.cityId
+        customer.cityName = req.body.cityName
+        customer.provinceId = req.body.provinceId
+        customer.provinceName = req.body.provinceName
+        customer.zip = req.body.zip
+        customer.userId = req.user._id
+        return customer.save()
+    })
+    .then (() => {
+        res.status(200).json('OK')
+    })
+}
+
 exports.insertDropshipper = (req, res) => {
     let customers = {
         dropship: '',

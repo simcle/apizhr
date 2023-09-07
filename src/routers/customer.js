@@ -4,6 +4,7 @@ const router = express.Router();
 const customerController = require('../controllers/customer');
 
 router.get('/', customerController.getAllCustomer);
+router.put('/', customerController.updateCustomer);
 router.get('/search', customerController.searchCustomer);
 router.get('/dropship', customerController.searchDropshipper);
 router.post('/', customerController.insertCustomer);
