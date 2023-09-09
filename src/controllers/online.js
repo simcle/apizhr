@@ -9,7 +9,10 @@ const stockCard = require('../modules/stockCard');
 exports.getDashboard = (req, res) => {
     const date = new Date();
     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const sevenDay = new Date(new Date() - 6 * 60 * 60 * 24 * 1000)
+    const sevenDay = new Date()
+    const day = sevenDay.getDate() - 6
+    sevenDay.setDate(day)
+    sevenDay.setHours(0, 0, 0, 0)
     const user = OnlineModel.aggregate([
         {$match: {createdAt: {$gte: today}}},
         {$lookup: {
@@ -66,6 +69,7 @@ exports.getDashboard = (req, res) => {
             total: {$sum: '$total'},
             data: {$push: {tanggal: '$tanggal', total: '$total'}}
         }},
+        {$sort: {total: -1}}
     ])
     Promise.all([
         user,

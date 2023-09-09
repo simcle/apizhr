@@ -1,12 +1,22 @@
 const SalesModel = require('../models/sales');
+const OnlineModel = require('../models/online');
 const PengeluaranModel = require('../models/pengeluaran');
 const NgolesModel = require('../models/ngoles');
 const ResellerModel = require('../models/reseller');
-
 exports.getDashboard = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const sevenDay = new Date(new Date() - 6 * 60 * 60 * 24 * 1000)
+    const sevenDay = new Date()
+    const day = sevenDay.getDate() - 6
+    sevenDay.setDate(day)
+    sevenDay.setHours(0, 0, 0, 0)
+    const online = OnlineModel.aggregate([
+        {$match: {createdAt: {$gte: today}}},
+        {$group: {
+            _id: null,
+            total: {$sum: '$grandTotal'}
+        }}
+    ])
     const omzet = SalesModel.aggregate([
         {$match: {createdAt: {$gte: today}}},
         {$group: {
@@ -78,24 +88,52 @@ exports.getDashboard = (req, res) => {
         }},
         {$sort: {total: -1}}
     ])
+    const onlineStat = OnlineModel.aggregate([
+        {$match: {createdAt: {$gte: sevenDay}}},
+        {$group: {
+            _id: {tanggal: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},
+            tanggal: {$first: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},
+            total: {$sum: '$grandTotal'}
+        }},
+        {$sort: {'_id.tanggal': 1}},
+        {$group: {
+            _id: null,
+            data: {$push: {tanggal: '$tanggal', total: '$total'}},
+            total: {$sum: '$total'}
+        }},
+        {$project: {
+            _id: '6475d52daa375fa751092f5d',
+            total: 1,
+            data: 1,
+            shop: 'ONLINE'
+        }}
+    ])
     Promise.all([
+        online,
         omzet,
         pengeluaran,
         ngoles,
         reseller,
         ngolesToday,
         resellerToday,
-        stats
+        stats,
+        onlineStat
     ])
     .then(result => {
+        const stat = result[7]
+        const onlineStat = result[8]
+        const stats = stat.concat(onlineStat)
+        stats.sort((a, b) => b.total - a.total)
         res.status(200).json({
-            omzet: result[0][0],
-            pengeluaran: result[1][0],
-            ngoles: result[2][0],
-            reseller: result[3][0],
-            ngolesToday: result[4][0],
-            resellerToday: result[5][0],
-            stats: result[6]
+            onlineOmzet: result[0][0],
+            omzet: result[1][0],
+            pengeluaran: result[2][0],
+            ngoles: result[3][0],
+            reseller: result[4][0],
+            ngolesToday: result[5][0],
+            resellerToday: result[6][0],
+            stats: stats,
+            onlineStat: result[8]
         })
     })
 }
