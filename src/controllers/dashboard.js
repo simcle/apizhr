@@ -120,20 +120,22 @@ exports.getDashboard = (req, res) => {
         onlineStat
     ])
     .then(result => {
+        const onlineOmzet = result[0][0].total
+        const omzet = result[1][0]
+        omzet.total += onlineOmzet
+        omzet.transfer += onlineOmzet
         const stat = result[7]
         const onlineStat = result[8]
         const stats = stat.concat(onlineStat)
         stats.sort((a, b) => b.total - a.total)
         res.status(200).json({
-            onlineOmzet: result[0][0],
-            omzet: result[1][0],
+            omzet: omzet,
             pengeluaran: result[2][0],
             ngoles: result[3][0],
             reseller: result[4][0],
             ngolesToday: result[5][0],
             resellerToday: result[6][0],
             stats: stats,
-            onlineStat: result[8]
         })
     })
 }
