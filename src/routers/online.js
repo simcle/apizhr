@@ -15,5 +15,5 @@ router.put('/dropship/:onlineId', onlineController.updateDropship);
 router.put('/printed/:onlineId', onlineController.updatePrinted);
 router.put('/resi/:onlineId', onlineController.updateResi);
 router.get('/transfer', onlineController.getTransfer);
-
+router.get('/statistics', onlineController.statistics);
 module.exports = router;

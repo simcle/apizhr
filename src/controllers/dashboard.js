@@ -120,10 +120,12 @@ exports.getDashboard = (req, res) => {
         onlineStat
     ])
     .then(result => {
-        const onlineOmzet = result[0][0].total
         const omzet = result[1][0]
-        omzet.total += onlineOmzet
-        omzet.transfer += onlineOmzet
+        if(result[0].length > 0) {
+            const onlineOmzet = result[0][0].total
+            omzet.total += onlineOmzet
+            omzet.transfer += onlineOmzet
+        }
         const stat = result[7]
         const onlineStat = result[8]
         const stats = stat.concat(onlineStat)

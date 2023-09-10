@@ -734,3 +734,38 @@ exports.getTransfer = (req, res) => {
         res.status(200).json(result)
     })
 }
+
+exports.statistics = (req, res) => {
+    const sales = OnlineModel.aggregate([
+       {$unwind: '$items'},
+       {$addFields: {
+            productId: '$items.productId',
+            sku: '$items.sku',
+            name: '$items.name',
+            qty: '$items.qty'
+       }},
+       {$project: {
+            productId: 1,
+            sku: 1,
+            name: 1,
+            qty: 1
+       }},
+       {$group: {
+            _id: '$productId',
+            sku: {$first: '$sku'},
+            name: {$first: '$name'},
+            qty: {$sum: '$qty'}
+       }},
+       {$sort: {qty : -1}},
+       {$limit: 20}
+    ])
+
+    Promise.all([
+        sales
+    ])
+    .then(result => {
+        res.status(200).json({
+            sales: result[0]
+        })
+    })
+}
