@@ -12,7 +12,6 @@ exports.getMarketplace = (req, res) => {
 }
 
 exports.postMarketplace = async (req, res) => {
-    console.log('hallo');
     let fileName = '';
     if(req.file) {
         const {filename: image} = req.file

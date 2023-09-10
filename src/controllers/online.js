@@ -5,6 +5,7 @@ const BankModel = require('../models/banks');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const MarketplaceModel = require('../models/marketplaces');
 
 exports.getDashboard = (req, res) => {
     const date = new Date();
@@ -736,36 +737,161 @@ exports.getTransfer = (req, res) => {
 }
 
 exports.statistics = (req, res) => {
+    let marketId = req.query.market
+    const filter = req.query.filter
+    let day;
+    let query = {}
+    if(marketId !== 'all') {
+        marketId = mongoose.Types.ObjectId(marketId)
+    }
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(marketId !== 'all') {
+        query = {$and: [{'marketplaceId': marketId}, {'createdAt': {$gte: date}}]}
+    } else {
+        query = {'createdAt': {$gte: date}}
+    }
     const sales = OnlineModel.aggregate([
-       {$unwind: '$items'},
-       {$addFields: {
-            productId: '$items.productId',
-            sku: '$items.sku',
-            name: '$items.name',
-            qty: '$items.qty'
-       }},
-       {$project: {
-            productId: 1,
-            sku: 1,
-            name: 1,
-            qty: 1
-       }},
-       {$group: {
-            _id: '$productId',
-            sku: {$first: '$sku'},
-            name: {$first: '$name'},
-            qty: {$sum: '$qty'}
-       }},
-       {$sort: {qty : -1}},
-       {$limit: 20}
+        {$unwind: '$items'},
+        {$lookup: {
+            from: 'customers',
+            localField: 'customerId',
+            foreignField: '_id',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$addFields: {
+            marketplaceId: '$customer.marketplaceId'
+        }},
+        {$match: query},
+        {$addFields: {
+                productId: '$items.productId',
+                sku: '$items.sku',
+                name: '$items.name',
+                qty: '$items.qty'
+        }},
+        {$project: {
+                productId: 1,
+                sku: 1,
+                name: 1,
+                qty: 1
+        }},
+        {$group: {
+                _id: '$productId',
+                sku: {$first: '$sku'},
+                name: {$first: '$name'},
+                qty: {$sum: '$qty'}
+        }},
+        {$sort: {qty : -1}},
+        {$limit: 20}
     ])
 
+    if(marketId !== 'all') {
+        query = {$and: [{'marketplaceId': marketId}, {'type': 'Retail'}, {'createdAt': {$gte: date}}]}
+    } else {
+        query = {$and: [{'type': 'Retail'}, {'createdAt': {$gte: date}}]}
+    }
+    const  customers = OnlineModel.aggregate([
+        {$group: {
+            _id: {customerId: '$customerId'},
+            total: {$sum: '$grandTotal'},
+            count: {$sum: 1},
+            createdAt: {$first: '$createdAt'},
+            type: {$first: '$type'}
+        }},
+        {$sort: {count : -1}},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: '_id.customerId',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$lookup: {
+            from: 'marketplaces',
+            foreignField: '_id',
+            localField: 'customer.marketplaceId',
+            as: 'market' 
+        }},
+        {$unwind: '$market'},
+        {$addFields: {
+            name: '$customer.name',
+            market: '$market.name',
+            marketplaceId: '$market._id'
+        }},
+        {$match: query},
+        {$limit: 20}
+    ])
+    if(marketId !== 'all') {
+        query = {$and: [{'marketplaceId': marketId}, {'type': 'Retail'}, {'createdAt': {$gte: date}}]}
+    } else {
+        query = {$and: [{'type': 'Dropship'}, {'createdAt': {$gte: date}}]}
+    }
+    const  dropship = OnlineModel.aggregate([
+        {$match: query},
+        {$group: {
+            _id: {customerId: '$dropshipperId'},
+            total: {$sum: '$grandTotal'},
+            count: {$sum: 1}  
+        }},
+        {$sort: {count : -1}},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: '_id.customerId',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$lookup: {
+            from: 'marketplaces',
+            foreignField: '_id',
+            localField: 'customer.marketplaceId',
+            as: 'market' 
+        }},
+        {$unwind: '$market'},
+        {$addFields: {
+            name: '$customer.name',
+            market: '$market.name'
+        }},
+        {$match: query},
+        {$limit: 20}
+    ])
+    const markets = MarketplaceModel.find().sort({name: 1}).lean()
+
     Promise.all([
-        sales
+        sales,
+        customers,
+        dropship,
+        markets
     ])
     .then(result => {
         res.status(200).json({
-            sales: result[0]
+            sales: result[0],
+            customers: result[1],
+            dropship: result[2],
+            markets: result[3]
         })
     })
 }
