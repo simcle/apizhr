@@ -9,13 +9,27 @@ exports.getSales = (req, res) => {
     const currentPage = req.query.page || 1
     const perPage = req.query.perPage || 20
     let totalItems;
-    const shopId = req.user.shopId
+    let grandTotal;
+    const shopId = mongoose.Types.ObjectId(req.user.shopId)
     const date = new Date();
     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    SalesModel.find({$and:[{shopId: shopId},{createdAt: {$gte: today}}]}).sort({createdAt: -1})
-    .countDocuments()
+    SalesModel.aggregate([
+        {$match: {$and:[{'shopId': shopId},{'createdAt': {$gte: today}}]}},
+        {$sort: {createdAt: -1}},
+        {$group: {
+            _id: null,
+            count: {$sum: 1},
+            total: {$sum: '$grandTotal'}
+        }}
+    ])
     .then(count => {
-        totalItems = count
+        if(count.length > 0) {
+            totalItems = count[0].count
+            grandTotal = count[0].total
+        } else {
+            totalItems = 0
+            grandTotal = 0
+        }
         return SalesModel.find({$and:[{shopId: shopId},{createdAt: {$gte: today}}]})
         .skip((currentPage-1) * perPage)
         .limit(perPage)
@@ -25,6 +39,8 @@ exports.getSales = (req, res) => {
         const last_page = Math.ceil(totalItems / perPage)
         res.status(200).json({
             data: result,
+            grandTotal: grandTotal,
+            count: totalItems,
             pages: {
                 current_page: currentPage,
                 last_page: last_page
