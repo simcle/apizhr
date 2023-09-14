@@ -120,7 +120,17 @@ exports.getDashboard = (req, res) => {
         onlineStat
     ])
     .then(result => {
-        const omzet = result[1][0]
+        let omzet = {
+            tunai: 0,
+            debit: 0,
+            transfer: 0,
+            multi: 0,
+            total: 0
+        }
+        
+        if(result[1].length > 0) {
+            omzet = result[1][0]
+        }
         if(result[0].length > 0) {
             const onlineOmzet = result[0][0].total
             omzet.total += onlineOmzet
