@@ -5,9 +5,11 @@ exports.getStatistics = (req, res) => {
     const items = ProductsModel.aggregate([
         {$lookup: {
             from: 'sales',
-            localField: '_id',
-            foreignField: 'items.productId',
-
+            let: {'productId': '$_id'},
+            pipeline: [
+                {$unwind: '$items'},
+                {$match: {$expr: {$eq: ['$$productId', '$items.productId']}}}
+            ],
             as: 'sales'
         }},
         {$unwind: '$sales'}
