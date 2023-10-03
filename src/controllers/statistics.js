@@ -210,10 +210,7 @@ exports.getStatItems = (req, res) => {
         date.setHours(0, 0, 0, 0)
     }
     query = {'createdAt': {$gte: date}}
-    const products = ProductModel.aggregate([
-        {$match: {$and: [{sku: {$exists: true}}]}}
-    ])
-    const online = OnlineModel.aggregate([
+    SalesModel.aggregate([
         {$match: query},
         {$unwind: '$items'},
         {$addFields: {
@@ -221,63 +218,110 @@ exports.getStatItems = (req, res) => {
             sku: '$items.sku',
             name: '$items.name',
             qty: '$items.qty',
-            total: '$items.total'
         }},
         {$group: {
             _id: '$productId',
             sku: {$first: '$sku'},
             name: {$first: '$name'},
-            qty: {$sum: '$qty'},
-            total: {$sum: '$total'}
+            sold: {$sum: '$qty'},
         }},
-        {$sort: {qty: -1}},
-        {$limit: 20}
-    ])
-    const sales = SalesModel.aggregate([
-        {$match: query},
-        {$unwind: '$items'},
+        {$sort: {sold: -1}},
+        {$limit: 50},
+        {$lookup: {
+            from: 'receipts',
+            let: {'productId': '$_id'},
+            pipeline: [
+                {$unwind: '$items'},
+                {$project: {
+                    items: 1
+                }},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {
+                        $eq: ['$$productId', '$_id']
+                    }
+                }}
+            ],
+            as: 'receipt'
+        }},
+        {$unwind: '$receipt'},
         {$addFields: {
-            productId: '$items.productId',
-            sku: '$items.sku',
-            name: '$items.name',
-            qty: '$items.qty',
-            total: '$items.total'
+            receipt: '$receipt.qty'
         }},
-        {$group: {
-            _id: '$productId',
-            sku: {$first: '$sku'},
-            name: {$first: '$name'},
-            qty: {$sum: '$qty'},
-            total: {$sum: '$total'}
+        {$lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'stock'
         }},
-        {$sort: {qty: -1}},
-        {$limit: 20}
-    ])
-    const receipts = ReceiptsModel.aggregate([
-        {$match: query},
-        {$unwind: '$items'},
+        {$unwind: '$stock'},
         {$addFields: {
-            productId: '$items.productId',
-            sku: '$items.sku',
-            name: '$items.name',
-            qty: '$items.qty',
-            total: '$items.total'
-        }},
-        {$group: {
-            _id: '$productId',
-            sku: {$first: '$sku'},
-            name: {$first: '$name'},
-            qty: {$sum: '$qty'},
-            total: {$sum: '$total'}
-        }},
-        {$sort: {qty: -1}},
-        {$limit: 20}
-    ])
-    Promise.all([
-        products,
+            stock: '$stock.stock'
+        }}
     ])
     .then(result => {
         return res.status(200).json(result)
     })
 
+}
+
+exports.detailItems = (req, res) => {
+    const sku = req.query.sku
+    const filter = req.query.filter
+    let day;
+    let query = {}
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    query = {$and: [{'createdAt': {$gte: date}},{'items.sku': sku}]}
+    SalesModel.aggregate([
+        {$unwind: '$items'},
+        {$match: query},
+        {$group: {
+            _id: '$shopId',
+            sku: {$first : '$items.sku'},
+            price: {$avg: '$items.price'},
+            qty: {$sum: '$items.qty'},
+            omzet: {$sum: '$items.subTotal'},
+            transaki: {$sum: 1}
+        }},
+        {$lookup: {
+            from: 'shops',
+            foreignField: '_id',
+            localField: '_id',
+            as: 'outlet'
+        }},
+        {$unwind: '$outlet'},
+        {$addFields: {
+            outlet: '$outlet.name'
+        }},
+        {$sort: {qty: -1}}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
 }
