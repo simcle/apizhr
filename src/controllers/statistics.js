@@ -378,9 +378,9 @@ exports.detailItems = (req, res) => {
         const online = result[1]
         const receipts = result[2]
         res.status(200).json({
-            sales: sales,
-            online: online,
-            receipts: receipts
+            // sales: sales,
+            // online: online,
+            // receipts: receipts
         })
     })
 }
