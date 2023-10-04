@@ -231,6 +231,11 @@ exports.getStatItems = (req, res) => {
             from: 'receipts',
             let: {'productId': '$_id'},
             pipeline: [
+                {$match: {
+                    $expr: {
+                        $gte: ['$createdAt', date]
+                    }
+                }},
                 {$unwind: '$items'},
                 {$project: {
                     items: 1
@@ -241,9 +246,9 @@ exports.getStatItems = (req, res) => {
                 }},
                 {$match: {
                     $expr: {
-                        $eq: ['$$productId', '$_id']
+                        $eq: ['$$productId', '$_id'],
                     }
-                }}
+                }},
             ],
             as: 'receipt'
         }},
@@ -298,7 +303,7 @@ exports.detailItems = (req, res) => {
         date.setHours(0, 0, 0, 0)
     }
     query = {$and: [{'createdAt': {$gte: date}},{'items.sku': sku}]}
-    SalesModel.aggregate([
+    const sales = SalesModel.aggregate([
         {$unwind: '$items'},
         {$match: query},
         {$group: {
@@ -321,7 +326,61 @@ exports.detailItems = (req, res) => {
         }},
         {$sort: {qty: -1}}
     ])
+    const online = OnlineModel.aggregate([
+        {$unwind: '$items'},
+        {$match: query},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: 'customerId',
+            as: 'marketId'
+        }},
+        {$unwind: '$marketId'},
+        {$addFields: {
+            marketId: '$marketId.marketplaceId'
+        }},
+        {$lookup: {
+            from: 'marketplaces',
+            foreignField: '_id',
+            localField: 'marketId',
+            as: 'marketplace'
+        }},
+        {$unwind: '$marketplace'},
+        {$addFields: {
+            marketplace: '$marketplace.name'
+        }},
+        {$group: {
+            _id: '$marketId',
+            marketplace: {$first: '$marketplace'},
+            sku: {$first : '$items.sku'},
+            price: {$avg: '$items.price'},
+            qty: {$sum: '$items.qty'},
+            omzet: {$sum: '$items.subTotal'},
+            transaki: {$sum: 1}
+        }},
+        {$sort: {qty: -1}}
+    ])
+    const receipts = ReceiptsModel.aggregate([
+        {$unwind: '$items'},
+        {$match: query},
+        {$group: {
+            _id: '$items.productId',
+            qty: {$sum: '$items.qty'}
+        }}
+    ])
+    Promise.all([
+        sales,
+        online,
+        receipts
+    ])
     .then(result => {
-        res.status(200).json(result)
+        const sales = result[0]
+        const online = result[1]
+        const receipts = result[2]
+        res.status(200).json({
+            sales: sales,
+            online: online,
+            receipts: receipts
+        })
     })
 }

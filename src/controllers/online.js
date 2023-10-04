@@ -6,6 +6,7 @@ const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
 const MarketplaceModel = require('../models/marketplaces');
+const excel = require('exceljs');
 
 exports.getDashboard = (req, res) => {
     const date = new Date();
@@ -894,4 +895,99 @@ exports.statistics = (req, res) => {
             markets: result[3]
         })
     })
+}
+
+exports.downloadExcel = async (req, res) => {
+    let marketId = req.query.market
+    const filter = req.query.filter
+    let day;
+    let query = {}
+    if(marketId !== 'all') {
+        marketId = mongoose.Types.ObjectId(marketId)
+    }
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(marketId !== 'all') {
+        query = {$and: [{'marketplaceId': marketId}, {'createdAt': {$gte: date}}]}
+    } else {
+        query = {'createdAt': {$gte: date}}
+    }
+    const sales = await OnlineModel.aggregate([
+        {$unwind: '$items'},
+        {$lookup: {
+            from: 'customers',
+            localField: 'customerId',
+            foreignField: '_id',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$addFields: {
+            marketplaceId: '$customer.marketplaceId'
+        }},
+        {$match: query},
+        {$addFields: {
+                productId: '$items.productId',
+                sku: '$items.sku',
+                name: '$items.name',
+                qty: '$items.qty'
+        }},
+        {$project: {
+                productId: 1,
+                sku: 1,
+                name: 1,
+                qty: 1
+        }},
+        {$group: {
+                _id: '$productId',
+                sku: {$first: '$sku'},
+                name: {$first: '$name'},
+                qty: {$sum: '$qty'}
+        }},
+        {$sort: {qty : -1}},
+        {$limit: 20}
+    ])
+    console.log(sales)
+
+    let workbook = new excel.Workbook()
+    let worksheet = workbook.addWorksheet('Laporan')
+    worksheet.columns = [
+        {key: 'sku', width: 25},
+        {key: 'name', width: 75},
+        {key: 'qty',  width: 25},
+    ]
+    worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
+    worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD']
+    worksheet.addRows(sales)
+    res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=" + "tutorials.xlsx"
+    );
+    await workbook.xlsx.write(res);
+    res.status(200).end();
 }

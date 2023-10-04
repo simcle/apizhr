@@ -16,4 +16,6 @@ router.put('/printed/:onlineId', onlineController.updatePrinted);
 router.put('/resi/:onlineId', onlineController.updateResi);
 router.get('/transfer', onlineController.getTransfer);
 router.get('/statistics', onlineController.statistics);
+router.get('/exports', onlineController.downloadExcel);
+
 module.exports = router;
