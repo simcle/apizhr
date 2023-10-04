@@ -252,9 +252,16 @@ exports.getStatItems = (req, res) => {
             ],
             as: 'receipt'
         }},
-        {$unwind: '$receipt'},
+        {$unwind: {
+            path: '$receipt',
+            preserveNullAndEmptyArrays: true
+        }},
         {$addFields: {
-            receipt: '$receipt.qty'
+            receipt: {
+                $cond: [
+                    {$ifNull: ['$receipt', false]},'$receipt.qty', 0
+                ]
+            }
         }},
         {$lookup: {
             from: 'products',
@@ -378,9 +385,9 @@ exports.detailItems = (req, res) => {
         const online = result[1]
         const receipts = result[2]
         res.status(200).json({
-            // sales: sales,
-            // online: online,
-            // receipts: receipts
+            sales: sales,
+            online: online,
+            receipts: receipts
         })
     })
 }
