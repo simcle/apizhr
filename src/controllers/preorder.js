@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 const PreoderModel = require('../models/preorder');
+const Pusher = require('pusher');
+const pusher = new Pusher({
+    appId: "1691787",
+    key: "40ef0cc59cdad1a5f5d8",
+    secret: "0a42aee3a055c8e7a15a",
+    cluster: "ap1",
+    useTLS: true
+});
 
 exports.getMenunggu = (req, res) => {
     const supplierId = mongoose.Types.ObjectId(req.params.id)
@@ -153,6 +161,9 @@ exports.insertPreorder = (req, res) => {
     })
     preorder.save()
     .then(result => {
+        pusher.trigger("notif", supplierId, {
+            message: "hello world"
+        });
         res.status(200).json(result)
     })
 }
