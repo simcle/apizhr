@@ -46,6 +46,7 @@ const rajaongkirRoutes = require('./src/routers/rajaongkir');
 const biteshipRoutes = require('./src/routers/biteship');
 const payrolRoutes = require('./src/routers/payroll');
 const statisticsRoutes = require('./src/routers/statistics');
+const preorderRoutes = require('./src/routers/preorder');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -78,6 +79,7 @@ app.use('/rajaongkir', authenticateToken, rajaongkirRoutes);
 app.use('/biteship', authenticateToken, biteshipRoutes);
 app.use('/payroll', authenticateToken, payrolRoutes);
 app.use('/statistics', statisticsRoutes)
+app.use('/preorder', preorderRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
