@@ -153,6 +153,7 @@ exports.getPreorder = (req, res) => {
     })
 }
 exports.insertPreorder = (req, res) => {
+    const supplierId = req.body.supplierId
     const preorder = new PreoderModel({
         customerId: req.body.customerId,
         supplierId: req.body.supplierId,
