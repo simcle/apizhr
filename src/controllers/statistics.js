@@ -5,6 +5,7 @@ const ResellerModel = require('../models/reseller');
 const PengeluaranModel = require('../models/pengeluaran');
 const ReceiptsModel = require('../models/receipts');
 const ProductModel = require('../models/products');
+const { default: mongoose } = require('mongoose');
 
 exports.getStats = (req, res)=> {
     const date = new Date()
@@ -280,6 +281,104 @@ exports.getStatItems = (req, res) => {
 
 }
 
+exports.getStatsReceipts = (req, res) => {
+    const filter = req.query.filter
+    let day;
+    let query = {}
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    query = {'createdAt': {$gte: date}}
+    ReceiptsModel.aggregate([
+        {$match: query},
+        {$unwind: '$items'},
+        {$unwind: '$items'},
+        {$addFields: {
+            productId: '$items.productId',
+            sku: '$items.sku',
+            name: '$items.name',
+            qty: '$items.qty',
+        }},
+        {$group: {
+            _id: '$productId',
+            sku: {$first: '$sku'},
+            name: {$first: '$name'},
+            receipt: {$sum: '$qty'},
+        }},
+        {$sort: {receipt: -1}},
+        {$limit: 50},
+        {$lookup: {
+            from: 'sales',
+            let: {'productId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {
+                        $gte: ['$createdAt', date]
+                    }
+                }},
+                {$unwind: '$items'},
+                {$project: {
+                    items: 1
+                }},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {
+                        $eq: ['$$productId', '$_id'],
+                    }
+                }},
+            ],
+            as: 'sales'
+        }},
+        {$unwind: {
+            path: '$sales',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            sales: {
+                $cond: [
+                    {$ifNull: ['$sales', false]},'$sales.qty', 0
+                ]
+            }
+        }},
+        {$lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'stock'
+        }},
+        {$unwind: '$stock'},
+        {$addFields: {
+            stock: '$stock.stock'
+        }}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
 exports.detailItems = (req, res) => {
     const sku = req.query.sku
     const filter = req.query.filter
@@ -389,5 +488,53 @@ exports.detailItems = (req, res) => {
             online: online,
             receipts: receipts
         })
+    })
+}
+
+exports.getOutletStats = (req, res) => {
+    const shopId =  mongoose.Types.ObjectId(req.query.shopId)
+    const filter = req.query.filter
+    let day;
+    let query = {}
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    query = {$and: [{'createdAt': {$gte: date}},{'shopId': shopId}]}
+    SalesModel.aggregate([
+        {$match: query},
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$items.productId',
+            name: {$first: '$items.name'},
+            sku: {$first: '$items.sku'},
+            qty: {$sum: '$items.qty'},
+            transaki: {$sum: 1}
+        }},
+        {$sort: {qty: -1}},
+        {$limit: 5}  
+    ])
+    .then(result => {
+        return res.status(200).json(result)
     })
 }

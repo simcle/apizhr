@@ -36,7 +36,7 @@ const UserSchema = new Schema({
     avatar: {type: String, default: null},
     refreshToken: {type: String, default: null},
     pin: {type: Number, unique: true},
-    template: {type: String, default: ''}
+    template: {type: String, default: ''},
     
 }, {
     timestamps: true
