@@ -8,7 +8,8 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({limit: '10mb'}));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
 const dir = path.join(__dirname, 'public');
 app.use('/public/', express.static(dir));
@@ -47,6 +48,7 @@ const biteshipRoutes = require('./src/routers/biteship');
 const payrolRoutes = require('./src/routers/payroll');
 const statisticsRoutes = require('./src/routers/statistics');
 const preorderRoutes = require('./src/routers/preorder');
+const bodyParser = require('body-parser');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);

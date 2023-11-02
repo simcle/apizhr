@@ -17,5 +17,6 @@ router.put('/resi/:onlineId', onlineController.updateResi);
 router.get('/transfer', onlineController.getTransfer);
 router.get('/statistics', onlineController.statistics);
 router.get('/exports', onlineController.downloadExcel);
+router.get('/report', onlineController.reportData);
 
 module.exports = router;

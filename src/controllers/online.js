@@ -968,7 +968,6 @@ exports.downloadExcel = async (req, res) => {
         {$sort: {qty : -1}},
         {$limit: 20}
     ])
-    console.log(sales)
 
     let workbook = new excel.Workbook()
     let worksheet = workbook.addWorksheet('Laporan')
@@ -990,4 +989,83 @@ exports.downloadExcel = async (req, res) => {
     );
     await workbook.xlsx.write(res);
     res.status(200).end();
+}
+
+exports.reportData = (req, res) => {
+    const start = new Date('2023-10-13');
+    const end = new Date('2023-10-17');
+    start.setHours(0, 0, 0, 0)
+    end.setHours(0, 0, 0, 0)
+    console.log('hallo')
+    const userId = mongoose.Types.ObjectId(req.user._id)
+    OnlineModel.aggregate([
+        {$match: {$and: [{createdAt: {$gte: start, $lt: end}}, {userId: userId}]}},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: 'customerId',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$lookup: {
+            from: 'marketplaces',
+            foreignField: '_id',
+            localField: 'customer.marketplaceId',
+            as: 'market'
+        }},
+        {$unwind: '$market'},
+        {$unwind: '$items'},
+        {$addFields: {
+            createdAt: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}},
+            customer: '$customer.name',
+            market: '$market.name',
+            sku: '$items.sku',
+            name: '$items.name',
+            price: '$items.price',
+            qty: '$items.qty',
+            total: '$items.total',
+        }},
+        {$project: {
+            createdAt: 1,
+            customer: 1,
+            market: 1,
+            shippingName: 1,
+            service: 1,
+            shipmentCost: 1,
+            sku: 1,
+            name: 1,
+            price: 1,
+            qty: 1,
+            total: 1
+        }}
+    ])
+    .then(async (result) => {
+        let workbook = new excel.Workbook()
+        let worksheet = workbook.addWorksheet('Laporan')
+        worksheet.columns = [
+            {key: 'createdAt', width: 15},
+            {key: 'customer', width: 25},
+            {key: 'market',  width: 15},
+            {key: 'shippingName',  width: 15},
+            {key: 'service',  width: 15},
+            {key: 'shipmentCost',  width: 10},
+            {key: 'sku',  width: 10},
+            {key: 'name',  width: 55},
+            {key: 'price',  width: 10},
+            {key: 'qty',  width: 10},
+            {key: 'total',  width: 10},
+        ]
+        worksheet.getRow(1).values = ['LAPORAN PENJUALAN', ``]
+        worksheet.getRow(3).values = ['TANGGAL', 'CUSTOMER', 'MARKET', 'PENGIRIMAN', 'SERVICE', 'ONGKIR', 'SKU', 'ITEM', 'HARGA', 'QTY', 'TOTAL']
+        worksheet.addRows(result)
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            "attachment; filename=" + "tutorials.xlsx"
+        );
+        await workbook.xlsx.write(res);
+    })
 }
