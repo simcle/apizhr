@@ -576,7 +576,7 @@ exports.updateProduct = async (req, res) => {
                 product.images = imagesList
                 product.description = req.body.description
                 product.purchase = req.body.purchase
-                product.nettPrice = req.body.purchase
+                product.nettPrice = req.body.nettPrice
                 product.price = req.body.price
                 product.weight = JSON.parse(req.body.weight)
                 product.userUpdated = userId
