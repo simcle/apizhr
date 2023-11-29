@@ -89,7 +89,7 @@ exports.getStockBarangOnline = (req, res) => {
         {$addFields: {
             shop: '$shop.name'
         }},
-        {$limit: 10}
+        {$limit: 20}
     ])
     .then(result => {
         res.status(200).json(result)
