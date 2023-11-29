@@ -48,7 +48,9 @@ const biteshipRoutes = require('./src/routers/biteship');
 const payrolRoutes = require('./src/routers/payroll');
 const statisticsRoutes = require('./src/routers/statistics');
 const preorderRoutes = require('./src/routers/preorder');
-const bodyParser = require('body-parser');
+const returnRoutes = require('./src/routers/returns');
+const mitraRoutes = require('./src/routers/mitra');
+const mitraAPIRoutes = require('./src/routers/mitraAPI');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -82,6 +84,9 @@ app.use('/biteship', authenticateToken, biteshipRoutes);
 app.use('/payroll', authenticateToken, payrolRoutes);
 app.use('/statistics', statisticsRoutes)
 app.use('/preorder', preorderRoutes);
+app.use('/returns', authenticateToken, returnRoutes);
+app.use('/mitra', authenticateToken, mitraRoutes);
+app.use('/mitra-api', mitraAPIRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);

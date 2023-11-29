@@ -538,3 +538,53 @@ exports.getOutletStats = (req, res) => {
         return res.status(200).json(result)
     })
 }
+
+exports.getOutOfStock = (req, res) => {
+    ProductModel.aggregate([
+        {$match: {isActive: true}},
+        {$sort: {stock: 1}},
+        {$limit: 50},
+        {$lookup: {
+            from: 'sales',
+            let: {'productId': '$_id'},
+            pipeline: [
+                {$unwind: '$items'},
+                {$project: {
+                    items: 1
+                }},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {
+                        $eq: ['$$productId', '$_id'],
+                    }
+                }}
+            ],
+            as: 'sales'
+        }},
+        {$unwind: {
+            path: '$sales',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            sales: {
+                $cond: [
+                    {$ifNull: ['$sales', false]},'$sales.qty', 0
+                ]
+            }
+        }},
+        {$project: {
+            sku: 1,
+            name: 1,
+            stock: 1,
+            sales: 1
+        }},
+        {$sort: {stock: 1}},
+        {$limit: 50}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+}

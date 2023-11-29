@@ -6,6 +6,7 @@ const ResellerModel = require('../models/reseller');
 const TransferModel = require('../models/transfer');
 const ReceiptsModel = require('../models/receipts');
 const StockCardModle = require('../models/stockCard');
+const ReturnModel = require('../models/returns');
 
 exports.getStockCard = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.params.productId)
@@ -75,6 +76,12 @@ exports.getStockCard = (req, res) => {
                 doc = await ReceiptsModel.findById(documentId)
                 if(doc) {
                     stockCard[i].document = doc.receiptsNo
+                }
+            }
+            if(el == 'Retur') {
+                doc = await ReturnModel.findById(documentId)
+                if(doc) {
+                    stockCard[i].document = doc.returnNo
                 }
             }
         }

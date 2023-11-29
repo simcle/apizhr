@@ -9,7 +9,7 @@ exports.searchItems = (req, res) => {
     let search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     Products.find({$and: [{sku: {$exists: true}}, {isActive: true} ,{$text: {$search: queryString}}]})
-    .limit(10)
+    .limit(20)
     .then(result => {
         res.status(200).json(result)
     })
