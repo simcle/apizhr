@@ -3,7 +3,54 @@ const SalesModel = require('../models/sales');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const excel = require('exceljs');
 
+exports.getReport = (req, res) => {
+    const categoryId = mongoose.Types.ObjectId('6477e92c474ed497218eddc6')
+    SalesModel.aggregate([
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$items.productId',
+            sku: {$first: '$items.sku'},
+            name: {$first: '$items.name'},
+            qty: {$sum: '$items.qty'}
+        }},
+        {$lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'category'
+        }},
+        {$unwind: '$category'},
+        {$addFields: {
+            category: '$category.categoryId'
+        }},
+        {$match: {category: categoryId}},
+        {$sort: {qty: -1}}
+    ])
+    .then(async (result) => {
+        let workbook = new excel.Workbook()
+        let worksheet = workbook.addWorksheet('Laporan')
+        worksheet.columns = [
+            {key: 'sku', width: 25},
+            {key: 'name', width: 75},
+            {key: 'qty',  width: 25},
+        ]
+        worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
+        worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD']
+        worksheet.addRows(result)
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            "attachment; filename=" + "tutorials.xlsx"
+        );
+        await workbook.xlsx.write(res);
+        res.status(200).end();
+    })
+}
 
 exports.getSales = (req, res) => {
     const currentPage = req.query.page || 1

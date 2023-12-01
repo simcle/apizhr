@@ -2,6 +2,81 @@ const mongoose = require('mongoose');
 const MitraInventoryModel = require('../models/mitraInventory');
 const MitraSaleModel = require('../models/mitraSales');
 
+exports.getDashboard = (req, res) => {
+    const mitraId = mongoose.Types.ObjectId(req.query.mitraId)
+    const thirtyDay = new Date()
+    const day = thirtyDay.getDate() - 29
+    thirtyDay.setDate(day)
+    thirtyDay.setHours(0, 0, 0, 0)
+    const stats = MitraSaleModel.aggregate([
+        {$match: {$and: [{mitraId: mitraId}, {createdAt: {$gte: thirtyDay}}]}},
+        {$project: {
+            createdAt: 1,
+            total: 1,
+            unitPrice: {$multiply: ['$unitPrice', '$qty']},
+            profit: {$subtract: ['$total', {$multiply: ['$unitPrice', '$qty']}]}
+        }},
+        {$group: {
+        _id: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}},
+            total: {$sum: '$total'},
+            unitPrice: {$sum: '$unitPrice'},
+            profit: {$sum: '$profit'}
+        }},
+        {$sort: {_id: 1}}
+    ])
+    const recap = MitraSaleModel.aggregate([
+        {$match: {$and: [{mitraId: mitraId}, {createdAt: {$gte: thirtyDay}}]}},
+        {$project: {
+            productId: 1,
+            sku: 1,
+            name: 1,
+            qty: 1,
+            total: 1,
+            unitPrice: {$multiply: ['$unitPrice', '$qty']},
+            profit: {$subtract: ['$total', {$multiply: ['$unitPrice', '$qty']}]}
+        }},
+        {$group: {
+            _id: '$productId',
+            sku: {$first: '$sku'},
+            name: {$first: '$name'},
+            sold: {$sum: '$qty'},
+            omzet: {$sum: '$total'},
+            unitcost: {$sum: '$unitPrice'},
+            profit: {$sum: '$profit'}
+        }},
+        {$lookup: {
+            from: 'mitrainventories',
+            let: {'itemId':'$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: { $and: [
+                        {$eq: ['$$itemId', '$productId']},
+                        {$eq: [mitraId, '$mitraId']},
+
+                    ]}
+                }},
+            ],
+            as: 'stock'
+        }},
+        {$unwind: '$stock'},
+        {$addFields: {
+            stock: '$stock.qty'
+        }},
+        {$sort: {sold: -1}}
+    ])
+    Promise.all([
+        stats,
+        recap
+    ])
+    .then(result => {
+        res.status(200).json({
+            stats: result[0],
+            recap: result[1]
+        })
+    })
+}
+
+
 exports.getSKU = (req, res) => {
     const mitraId = req.query.mitraId
     const sku = req.query.sku

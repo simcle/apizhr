@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const MitraModel = require('../models/mitra');
 const MitraTakeModel = require('../models/mitraTake');
 const MitraRetrunModel = require('../models/mitraReturn');
+const MitraPaymentModel = require('../models/mitraPayment');
+const MitraSalesModel = require('../models/mitraSales');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
@@ -216,4 +218,65 @@ exports.mitraReturn = async (req, res) => {
         }
         res.status(200).json(result)
     })
+}
+
+exports.getSales = (req, res) => {
+    const mitraId = req.params.mitraId
+    MitraSalesModel.find({$and: [{mitraId: mitraId}, {status: 'BELUM BAYAR'}]})
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
+exports.mitraPayment = async (req, res) => {
+    const userId = req.user._id
+    const shopId = req.user.shopId
+    const mitraId = req.body.mitraId
+    const items = req.body.items
+    const grandTotal = req.body.grandTotal
+    const date = new Date();
+    let dd = date.getDate();
+    let mm = date.getMonth() +1;
+    let yy = date.getFullYear().toString().substring(2);
+    dd = checkTime(dd);
+    mm = checkTime(mm)
+    function checkTime (i) {
+        if(i < 10) {
+            i = `0${i}`
+        }
+        return i
+    }
+    let today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    let payment = await MitraPaymentModel.findOne({createdAt: {$gte: today}}).sort({createdAt: -1})
+    let paymentNo;
+    if(payment) {
+        const no = payment.paymentNo.substring(16)
+        const newNo = parseInt(no)+1
+        paymentNo = `${dd}${mm}/MTR/BYR/${yy}/${newNo}`
+    } else {
+        paymentNo = `${dd}${mm}/MTR/BYR/${yy}/1`
+    }
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        await MitraSalesModel.updateOne({_id: item._id}, {status: 'LUNAS'})
+    }
+
+    const mitraPayment = new MitraPaymentModel({
+        paymentNo: paymentNo,
+        mitraId: mitraId,
+        items: items,
+        userId: userId
+    })
+    await mitraPayment.save();
+    const mitraHistory = new MitraHistoryModel({
+        documentNo: paymentNo,
+        type: 'Bayar',
+        mitraId: mitraId,
+        shopId: shopId,
+        items: items,
+        grandTotal: grandTotal,
+        userId: userId
+    })
+    await mitraHistory.save()
+    res.status(200).json('OK')
 }
