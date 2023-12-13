@@ -9,5 +9,6 @@ router.get('/receipts', statisticsController.getStatsReceipts);
 router.get('/items/detail', statisticsController.detailItems);
 router.get('/outlet', statisticsController.getOutletStats);
 router.get('/out-of-stock', statisticsController.getOutOfStock);
+router.get('/summary/:productId', statisticsController.getSummary);
 
 module.exports = router;

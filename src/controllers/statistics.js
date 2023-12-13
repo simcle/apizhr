@@ -415,10 +415,11 @@ exports.detailItems = (req, res) => {
         {$group: {
             _id: '$shopId',
             sku: {$first : '$items.sku'},
+            productId: {$first: '$items.productId'},
             price: {$avg: '$items.price'},
             qty: {$sum: '$items.qty'},
             omzet: {$sum: '$items.subTotal'},
-            transaki: {$sum: 1}
+            transaksi: {$sum: 1}
         }},
         {$lookup: {
             from: 'shops',
@@ -427,8 +428,25 @@ exports.detailItems = (req, res) => {
             as: 'outlet'
         }},
         {$unwind: '$outlet'},
+        {$lookup: {
+            from: 'inventories',
+            let: {'itemId': '$productId', 'shopId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {
+                        $and: [
+                            {$eq: ['$$itemId', '$productId']},
+                            {$eq: ['$$shopId', '$shopId']}
+                        ]
+                    }
+                }}
+            ],
+            as: 'stock'
+        }},
+        {$unwind: '$stock'},
         {$addFields: {
-            outlet: '$outlet.name'
+            outlet: '$outlet.name',
+            stock: '$stock.qty'
         }},
         {$sort: {qty: -1}}
     ])
@@ -583,6 +601,53 @@ exports.getOutOfStock = (req, res) => {
         }},
         {$sort: {stock: 1}},
         {$limit: 50}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
+exports.getSummary = (req, res) => {
+    const productId = mongoose.Types.ObjectId(req.params.productId)
+
+    SalesModel.aggregate([
+        {$unwind: '$items'},
+        {$match: {'items.productId': productId}},
+        {$group: {
+            _id: '$shopId',
+            productId: {$first: '$items.productId'},
+            qty: {$sum: '$items.qty'},
+            tota: {$sum: '$items.subTotal'}
+        }},
+        {$lookup: {
+            from: 'shops',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'shop'
+        }},
+        {$unwind: '$shop'},
+        {$addFields: {
+            shop: '$shop.name'
+        }},
+        {$lookup: {
+            from: 'inventories',
+            let: {'itemId': '$productId', 'shopId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {
+                        $and: [
+                            {$eq: ['$$itemId', '$productId']},
+                            {$eq: ['$$shopId', '$shopId']}
+                        ]
+                    }
+                }}
+            ],
+            as: 'stock'
+        }},
+        {$unwind: '$stock'},
+        {$addFields: {
+            stock: '$stock.qty'
+        }}  
     ])
     .then(result => {
         res.status(200).json(result)

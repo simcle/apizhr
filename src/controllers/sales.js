@@ -1,54 +1,225 @@
 const mongoose = require('mongoose');
 const SalesModel = require('../models/sales');
+const OnlineModel = require('../models/online');
+const productModel = require('../models/products');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const OutletModel = require('../models/shops');
 const excel = require('exceljs');
 
+exports.getOutlet = (req, res) => {
+    OutletModel.find().lean()
+    .then(result => {
+        const outlet = result.map(obj => {
+            obj.id = obj._id,
+            obj.text = obj.name
+            return obj
+        })
+        res.status(200).json(outlet)
+    })
+}
+
 exports.getReport = (req, res) => {
-    const categoryId = mongoose.Types.ObjectId('6477e92c474ed497218eddc6')
+    const shopId = mongoose.Types.ObjectId(req.query.shopId);
     SalesModel.aggregate([
+        {$match: {shopId: shopId}},
         {$unwind: '$items'},
         {$group: {
             _id: '$items.productId',
             sku: {$first: '$items.sku'},
             name: {$first: '$items.name'},
-            qty: {$sum: '$items.qty'}
+            sales: {$sum: '$items.qty'},
+            total: {$sum: '$items.subTotal'}
         }},
+        {$sort: {sales: -1}},
+        {$limit: 100},
         {$lookup: {
-            from: 'products',
-            localField: '_id',
-            foreignField: '_id',
-            as: 'category'
+            from: 'inventories',
+            let: {'itemId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {$and: [
+                        {$eq: ['$$itemId', '$productId']},
+                        {$eq: ['$shopId', shopId]}
+                    ]}
+                }}
+            ],
+            as: 'stock'
         }},
-        {$unwind: '$category'},
+        {$unwind: '$stock'},
         {$addFields: {
-            category: '$category.categoryId'
+            stock: '$stock.qty'
         }},
-        {$match: {category: categoryId}},
-        {$sort: {qty: -1}}
+        {$match: {stock: {$lte: 0}}}
     ])
-    .then(async (result) => {
-        let workbook = new excel.Workbook()
-        let worksheet = workbook.addWorksheet('Laporan')
-        worksheet.columns = [
-            {key: 'sku', width: 25},
-            {key: 'name', width: 75},
-            {key: 'qty',  width: 25},
-        ]
-        worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
-        worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD']
-        worksheet.addRows(result)
-        res.setHeader(
-            "Content-Type",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        );
-        res.setHeader(
-            "Content-Disposition",
-            "attachment; filename=" + "tutorials.xlsx"
-        );
-        await workbook.xlsx.write(res);
-        res.status(200).end();
+    .then(result => {
+        res.status(200).json(result)
+    })
+
+    // productModel.aggregate([
+    //     {$sort: {stock: -1}},
+    //     {$limit: 200},
+    //     {$project: {
+    //         sku: 1,
+    //         name: 1,
+    //         stock: 1
+    //     }},
+    //     {$lookup: {
+    //         from: 'sales',
+    //         let: {'itemId': '$_id'},
+    //         pipeline: [
+    //             {$unwind: '$items'},
+    //             {$match: {
+    //                 $expr: {$eq: ['$$itemId', '$items.productId']}
+    //             }},
+    //             {$group: {
+    //                 _id: '$items.productId',
+    //                 qty: {$sum: '$items.qty'},
+    //                 total: {$sum: '$items.subTotal'}
+    //             }}
+    //         ],
+    //         as: 'sales'
+    //     }},
+    //     {$unwind: '$sales'},
+    //     {$addFields: {
+    //         sold: '$sales.qty',
+    //         tota: '$sales.total' 
+    //     }},
+    //     {$unset: 'sales'}
+    // ])
+    // .then (async(result) => {
+    //    console.log(result)
+    //     let workbook = new excel.Workbook()
+    //     let worksheet = workbook.addWorksheet('Laporan')
+    //     worksheet.columns = [
+    //         {key: 'sku', width: 25},
+    //         {key: 'name', width: 75},
+    //         {key: 'stock',  width: 25},
+    //         {key: 'sold',  width: 25},
+    //         {key: 'tota',  width: 25},
+    //     ]
+    //     worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
+    //     worksheet.getRow(3).values = ['SKU', 'ITEM','STOCK']
+    //     worksheet.addRows(result)
+    //     res.setHeader(
+    //         "Content-Type",
+    //         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    //     );
+    //     res.setHeader(
+    //         "Content-Disposition",
+    //         "attachment; filename=" + "tutorials.xlsx"
+    //     );
+    //     await workbook.xlsx.write(res);
+    //     res.status(200).end();
+    // })
+
+    // const shopId = mongoose.Types.ObjectId('647aa84733581aaca9c7725b')
+    // InventoryModel.aggregate([
+    //     {$match: {shopId: shopId}},
+    //     {$lookup: {
+    //         from: 'products',
+    //         foreignField: '_id',
+    //         localField: 'productId',
+    //         as: 'product'
+    //     }},
+    //     {$unwind: '$product'},
+    //     {$addFields: {
+    //         sku: '$product.sku',
+    //         name: '$product.name'
+    //     }},
+    //     {$unset: 'product'},
+    //     {$sort: {qty: 1}}
+    // ])
+    // .then(async(result) => {
+    //     console.log(result)
+    //     let workbook = new excel.Workbook()
+    //     let worksheet = workbook.addWorksheet('Laporan')
+    //     worksheet.columns = [
+    //         {key: 'sku', width: 25},
+    //         {key: 'name', width: 75},
+    //         {key: 'qty',  width: 25},
+    //     ]
+    //     worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
+    //     worksheet.getRow(3).values = ['SKU', 'ITEM','STOCK']
+    //     worksheet.addRows(result)
+    //     res.setHeader(
+    //         "Content-Type",
+    //         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    //     );
+    //     res.setHeader(
+    //         "Content-Disposition",
+    //         "attachment; filename=" + "tutorials.xlsx"
+    //     );
+    //     await workbook.xlsx.write(res);
+    //     res.status(200).end();
+    // })
+    // const categoryId = mongoose.Types.ObjectId('6477e92c474ed497218eddc6')
+    // SalesModel.aggregate([
+    //     {$unwind: '$items'},
+    //     {$group: {
+    //         _id: '$items.productId',
+    //         sku: {$first: '$items.sku'},
+    //         name: {$first: '$items.name'},
+    //         qty: {$sum: '$items.qty'}
+    //     }},
+    //     {$lookup: {
+    //         from: 'products',
+    //         localField: '_id',
+    //         foreignField: '_id',
+    //         as: 'category'
+    //     }},
+    //     {$unwind: '$category'},
+    //     {$addFields: {
+    //         category: '$category.categoryId'
+    //     }},
+    //     {$match: {category: categoryId}},
+    //     {$sort: {qty: -1}}
+    // ])
+    // .then(async (result) => {
+    //     let workbook = new excel.Workbook()
+    //     let worksheet = workbook.addWorksheet('Laporan')
+    //     worksheet.columns = [
+    //         {key: 'sku', width: 25},
+    //         {key: 'name', width: 75},
+    //         {key: 'qty',  width: 25},
+    //     ]
+    //     worksheet.getRow(1).values = ['STATISTICS PENJUALAN', ``]
+    //     worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD']
+    //     worksheet.addRows(result)
+    //     res.setHeader(
+    //         "Content-Type",
+    //         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    //     );
+    //     res.setHeader(
+    //         "Content-Disposition",
+    //         "attachment; filename=" + "tutorials.xlsx"
+    //     );
+    //     await workbook.xlsx.write(res);
+    //     res.status(200).end();
+    // })
+}
+exports.getChart = (req, res) => {
+    const productId = mongoose.Types.ObjectId(req.query.productId)
+    const shopId = mongoose.Types.ObjectId(req.query.shopId)
+    SalesModel.aggregate([
+        {$unwind: '$items'},
+        {$match: {$and: [{shopId: shopId}, {'items.productId': productId}]}},
+        {$addFields: {
+            qty: '$items.qty'
+        }},
+        {$project: {
+            createdAt: 1,
+            qty: 1
+        }},
+        {$group: {
+            _id: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}},
+            qty: {$sum: '$qty'}
+        }},
+        {$sort: {_id: 1}}
+    ])
+    .then(result => {
+        res.status(200).json(result)
     })
 }
 

@@ -9,4 +9,7 @@ router.post('/', mitraController.insertSales);
 router.put('/', mitraController.deleteSales);
 router.get('/inventory', mitraController.getInventory);
 
+router.get('/so/sku', mitraController.getSoSku);
+router.post('/so', mitraController.insertSoInventory);
+
 module.exports = router

@@ -1,6 +1,49 @@
 const mongoose = require('mongoose');
 const MitraInventoryModel = require('../models/mitraInventory');
 const MitraSaleModel = require('../models/mitraSales');
+const ProductModel = require('../models/products');
+
+exports.getSoSku = (req, res) => {
+    const sku = req.query.sku
+    ProductModel.findOne({sku: sku})
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
+exports.insertSoInventory = (req, res) => {
+    const productId = req.body.productId
+    const mitraId = req.body.mitraId
+    const sku = req.body.sku
+    const name = req.body.name
+    const unitPrice = req.body.unitPrice
+    const qty = req.body.qty
+    MitraInventoryModel.findOne({$and: [{productId: productId}, {mitraId: mitraId}]})
+    .then(item => {
+        if(item) {
+            item.unitPrice = unitPrice
+            item.name = item.name
+            item.qty = item.qty + qty
+            item.save()
+            .then(() => {
+                res.status(200).json('OK')
+            })
+        } else {
+            const inv = new MitraInventoryModel({
+                mitraId: mitraId,
+                productId: productId,
+                sku: sku,
+                name: name,
+                unitPrice: unitPrice,
+                qty: qty
+            })
+            inv.save()
+            .then(() => {
+                res.status(200).json('OK')
+            })
+        }
+    })
+}
 
 exports.getDashboard = (req, res) => {
     const mitraId = mongoose.Types.ObjectId(req.query.mitraId)
