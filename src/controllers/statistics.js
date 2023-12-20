@@ -609,10 +609,13 @@ exports.getOutOfStock = (req, res) => {
 
 exports.getSummary = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.params.productId)
-
+    const date = new Date();
+    let day = date.getDate() - 89
+    date.setDate(day)
+    date.setHours(0, 0, 0, 0)
     SalesModel.aggregate([
         {$unwind: '$items'},
-        {$match: {'items.productId': productId}},
+        {$match: {$and: [{createdAt: {$gte: date}}, {'items.productId': productId}]}},
         {$group: {
             _id: '$shopId',
             productId: {$first: '$items.productId'},

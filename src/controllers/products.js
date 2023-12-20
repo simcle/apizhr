@@ -160,7 +160,7 @@ exports.getAllProducts = (req, res) => {
                 isActive: 1,
                 createdAt: 1
             }},
-            {$sort: {createdAt: -1}},
+            {$sort: {stock: -1}},
             {$skip: (currentPage -1) * perPage},
             {$limit: perPage},
         ])

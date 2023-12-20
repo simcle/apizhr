@@ -21,9 +21,13 @@ exports.getOutlet = (req, res) => {
 }
 
 exports.getReport = (req, res) => {
+    const date = new Date();
+    let day = date.getDate() - 89
+    date.setDate(day)
+    date.setHours(0, 0, 0, 0)
     const shopId = mongoose.Types.ObjectId(req.query.shopId);
     SalesModel.aggregate([
-        {$match: {shopId: shopId}},
+        {$match: {$and: [{createdAt: {$gte: date}}, {shopId: shopId}]}},
         {$unwind: '$items'},
         {$group: {
             _id: '$items.productId',
@@ -202,7 +206,7 @@ exports.getReport = (req, res) => {
 exports.getChart = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.query.productId)
     const shopId = mongoose.Types.ObjectId(req.query.shopId)
-    SalesModel.aggregate([
+    const sales = SalesModel.aggregate([
         {$unwind: '$items'},
         {$match: {$and: [{shopId: shopId}, {'items.productId': productId}]}},
         {$addFields: {
@@ -218,11 +222,71 @@ exports.getChart = (req, res) => {
         }},
         {$sort: {_id: 1}}
     ])
+    const invnentory = InventoryModel.aggregate([
+        {$match: {productId: productId}},
+        {$lookup: {
+            from: 'shops',
+            foreignField: '_id',
+            localField: 'shopId',
+            as: 'shop'
+        }},
+        {$unwind: '$shop'},
+        {$addFields: {
+            shop: '$shop.name'
+        }}
+    ])
+    Promise.all([
+        sales,
+        invnentory
+    ])
+    .then(result  => {
+        res.status(200).json({
+            sales: result[0],
+            inventory: result[1]
+        })
+    })
+}
+exports.getBestSales = (req, res) => {
+    const shopId = mongoose.Types.ObjectId(req.user.shopId)
+    const date = new Date();
+    day = date.getDate() - 29
+    date.setDate(day)
+    date.setHours(0, 0, 0, 0)
+    SalesModel.aggregate([
+        {$match: {$and: [{shopId: shopId}, {createdAt: {$gte: date}}]}},
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$items.productId',
+            qty: {$sum: '$items.qty'},
+            sku: {$first: '$items.sku'},
+            name: {$first: '$items.name'}
+        }},
+        {$sort: {qty: -1}},
+        {$limit: 20},
+        {$lookup: {
+            from:'inventories',
+            let: {'itemId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {
+                        $and: [
+                            {$eq: ['$productId', '$$itemId']},
+                            {$eq: ['$shopId', shopId]}
+                        ]
+                    }
+                }}
+            ],
+            as: 'stock'
+        }},
+        {$unwind: '$stock'},
+        {$addFields: {
+            stock: '$stock.qty'
+        }},
+    ])
     .then(result => {
         res.status(200).json(result)
     })
 }
-
 exports.getSales = (req, res) => {
     const currentPage = req.query.page || 1
     const perPage = req.query.perPage || 20
