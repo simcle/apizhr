@@ -24,14 +24,31 @@ exports.getStock = (req, res) => {
 
 exports.getStockBarang = (req, res) => {
     const search = req.query.search
-    InventoryModel.aggregate([
+    var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
+    ProductModel.aggregate([
+        {$match: {$text: {$search: queryString}}},
         {$lookup: {
-            from: 'products',
-            localField: 'productId',
-            foreignField: '_id',
-            as: 'product'
+            from: 'inventories',
+            localField: '_id',
+            foreignField: 'productId',
+            as: 'inventory'
         }},
-        {$unwind: '$product'},
+        {$project: {
+            _id: 0,
+            name: 1,
+            sku: 1,
+            inventory: 1
+        }},
+        {$unwind: '$inventory'},
+        {$replaceRoot: {newRoot: {$mergeObjects: ['$$ROOT', '$inventory']}}},
+        {$project: {
+            _id: 1,
+            name: 1,
+            sku: 1,
+            shopId: 1,
+            productId: 1,
+            qty: 1
+        }},
         {$lookup: {
             from: 'shops',
             localField: 'shopId',
@@ -40,11 +57,8 @@ exports.getStockBarang = (req, res) => {
         }},
         {$unwind: '$shop'},
         {$addFields: {
-            name: '$product.name',
-            sku: '$product.sku',
             shop: '$shop.name'
         }},
-        {$match: {$or: [{sku: {$regex:'.*'+search+'.*', $options: 'i'}}, {name: {$regex: ',*'+search+'.*', $options: 'i'}}]}},
         {$limit: 10}
     ])
     .then(result => {

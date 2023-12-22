@@ -249,7 +249,7 @@ exports.getChart = (req, res) => {
 exports.getBestSales = (req, res) => {
     const shopId = mongoose.Types.ObjectId(req.user.shopId)
     const date = new Date();
-    day = date.getDate() - 29
+    day = date.getDate() - 6
     date.setDate(day)
     date.setHours(0, 0, 0, 0)
     SalesModel.aggregate([
@@ -262,7 +262,7 @@ exports.getBestSales = (req, res) => {
             name: {$first: '$items.name'}
         }},
         {$sort: {qty: -1}},
-        {$limit: 20},
+        {$limit: 50},
         {$lookup: {
             from:'inventories',
             let: {'itemId': '$_id'},
