@@ -5,6 +5,18 @@ const CategoryModel = require('../models/categories');
 const ShopModel = require('../models/shops');
 const ProductModel = require('../models/products');
 
+exports.getShop = (req, res) => {
+    ShopModel.find().sort({name: 1}).lean()
+    .then(result => {
+        const data = result.map(obj => {
+            obj.id = obj._id,
+            obj.text = obj.name
+            return obj
+        })
+        res.status(200).json(data)
+    })
+}
+
 exports.getCategories = (req, res) => {
     CategoryModel.find().sort({name: 1}).lean()
     .then(result => {
@@ -319,5 +331,110 @@ exports.getAnalyticSKU = (req, res) => {
                 res.status(200).json(result)
             })
         }
+    })
+}
+exports.taskStockOpname = (req, res) => {
+    const sku = req.query.sku
+    const shopId = mongoose.Types.ObjectId(req.query.shopId)
+    ProductModel.findOne({sku: sku})
+    .then (result => {
+        if(result) {
+            if(result.parentId) {
+                return query = {parentId: result.parentId}
+            } else {
+                return query = {_id: result._id}
+            }
+        } else {
+            res.status(200).json([])
+        }
+    })
+    .then(queryId => {
+        if(queryId) {
+            ProductModel.aggregate([
+                {$match: query},
+                {$lookup: {
+                    from: 'sales',
+                    let: {'itemId': '$_id'},
+                    pipeline: [
+                        // {$match: {
+                        //     $expr: {$gte: ['$createdAt', date]}
+                        // }},
+                        {$unwind: '$items'},
+                        {$match: {
+                            $expr: {
+                                $and: [
+                                    {$eq: ['$items.productId', '$$itemId']},
+                                    {$eq: ['$shopId', shopId]}
+                                ]
+                            }
+                        }},
+                        {$group: {
+                            _id: '$items.productId',
+                            qty: {$sum: '$items.qty'}
+                        }}
+                    ],
+                    as: 'sold'
+                }},
+                {$unwind: {
+                    path: '$sold',
+                    preserveNullAndEmptyArrays: true
+                }},
+                {$addFields: {
+                    sold: {
+                        $cond: [
+                            {$ifNull: ['$sold', false]},'$sold.qty', 0
+                        ]
+                    }
+                }},
+                {$lookup: {
+                    from: 'inventories',
+                    foreignField: 'productId',
+                    localField: '_id',
+                    as: 'inventory'
+                }},
+                {$unwind: {
+                    path: '$inventory',
+                    preserveNullAndEmptyArrays: true
+                }},
+                {$match: {'inventory.shopId': shopId}},
+                {$addFields: {
+                    inventory: '$inventory.qty'
+                }},
+                {$sort: {sku: 1}}
+            ])
+            .then(result => {
+                res.status(200).json(result)
+            })
+        }
+    })
+}
+exports.getProductKonsumtif = (req, res) => {
+    ProductModel.aggregate([
+        {$match: {stock: {$gt: 0}}},
+        {$sort: {stock: -1}},
+        {$lookup: {
+            from: 'sales',
+            foreignField: 'items.productId',
+            localField: '_id',
+            as: 'sales'
+        }},
+        {$lookup: {
+            from: 'onlines',
+            foreignField: 'items.productId',
+            localField: '_id',
+            as: 'online'
+        }},
+        {$match: {$and: [{sales: []}, {online: []}]}},
+        // {$limit: 100},
+        {$project: {
+            sku: 1,
+            name: 1,
+            stock: 1,
+            purchase: 1,
+            total: {$multiply: ['$purchase', '$stock']}
+        }}
+    ])
+    .then(result => {
+        res.status(200).json(result)
     })
 }

@@ -25,8 +25,16 @@ exports.getStock = (req, res) => {
 exports.getStockBarang = (req, res) => {
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
+    console.log(queryString)
     ProductModel.aggregate([
         {$match: {$text: {$search: queryString}}},
+        {$project: {
+            _id: 1,
+            sku: 1,
+            name: 1,
+            score: {$meta: 'textScore'}
+        }},
+        {$sort: {score: -1}},
         {$lookup: {
             from: 'inventories',
             localField: '_id',
@@ -37,7 +45,8 @@ exports.getStockBarang = (req, res) => {
             _id: 0,
             name: 1,
             sku: 1,
-            inventory: 1
+            inventory: 1,
+            score: 1
         }},
         {$unwind: '$inventory'},
         {$replaceRoot: {newRoot: {$mergeObjects: ['$$ROOT', '$inventory']}}},
@@ -47,7 +56,8 @@ exports.getStockBarang = (req, res) => {
             sku: 1,
             shopId: 1,
             productId: 1,
-            qty: 1
+            qty: 1,
+            score: 1
         }},
         {$lookup: {
             from: 'shops',
@@ -71,6 +81,13 @@ exports.getStockBarangOnline = (req, res) => {
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     ProductModel.aggregate([
         {$match: {$text: {$search: queryString}}},
+        {$project: {
+            _id: 1,
+            sku: 1,
+            name: 1,
+            score: {$meta: 'textScore'}
+        }},
+        {$sort: {score: -1}},
         {$lookup: {
             from: 'inventories',
             localField: '_id',
