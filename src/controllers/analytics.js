@@ -4,6 +4,7 @@ const ReceiptsModel = require('../models/receipts');
 const CategoryModel = require('../models/categories');
 const ShopModel = require('../models/shops');
 const ProductModel = require('../models/products');
+const excel = require('exceljs');
 
 exports.getShop = (req, res) => {
     ShopModel.find().sort({name: 1}).lean()
@@ -333,6 +334,109 @@ exports.getAnalyticSKU = (req, res) => {
         }
     })
 }
+exports.downloadAnalyticSKU = (req, res) => {
+    const sku = req.query.search
+    const filter = req.query.time
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    let query;
+    ProductModel.findOne({sku: sku})
+    .then (result => {
+        if(result) {
+            if(result.parentId) {
+                return query = {parentId: result.parentId}
+            } else {
+                return query = {_id: result._id}
+            }
+        } else {
+            res.status(200).json([])
+        }
+    })
+    .then(queryId => {
+        if(queryId) {
+            ProductModel.aggregate([
+                {$match: query},
+                {$lookup: {
+                    from: 'sales',
+                    let: {'itemId': '$_id'},
+                    pipeline: [
+                        {$match: {
+                            $expr: {$gte: ['$createdAt', date]}
+                        }},
+                        {$unwind: '$items'},
+                        {$match: {
+                            $expr: {
+                                $eq: ['$items.productId', '$$itemId']
+                            }
+                        }},
+                        {$group: {
+                            _id: '$items.productId',
+                            qty: {$sum: '$items.qty'}
+                        }}
+                    ],
+                    as: 'sold'
+                }},
+                {$unwind: {
+                    path: '$sold',
+                    preserveNullAndEmptyArrays: true
+                }},
+                {$addFields: {
+                    sold: {
+                        $cond: [
+                            {$ifNull: ['$sold', false]},'$sold.qty', 0
+                        ]
+                    }
+                }},
+                {$sort: {sold: -1}}
+            ])
+            .then(async (result) => {
+                let workbook = new excel.Workbook()
+                let worksheet = workbook.addWorksheet('Laporan')
+                worksheet.columns = [
+                    {key: 'sku', width: 10},
+                    {key: 'name', width: 45},
+                    {key: 'sold',  width: 10},
+                    {key: 'stock',  width: 10},
+                ]
+                worksheet.getRow(1).values = ['ANALYTICS ITEMS', ``]
+                worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD', 'STOCK']
+                worksheet.addRows(result)
+                res.setHeader(
+                    "Content-Type",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                );
+                res.setHeader(
+                    "Content-Disposition",
+                    "attachment; filename=" + "tutorials.xlsx"
+                );
+                await workbook.xlsx.write(res);
+                res.status(200).end();
+            })
+        }
+    })
+}
 exports.taskStockOpname = (req, res) => {
     const sku = req.query.sku
     const shopId = mongoose.Types.ObjectId(req.query.shopId)
@@ -410,7 +514,7 @@ exports.taskStockOpname = (req, res) => {
 }
 exports.getProductKonsumtif = (req, res) => {
     ProductModel.aggregate([
-        {$match: {stock: {$gt: 0}}},
+        {$match: {$and: [{isActive: true}, {stock: {$gte: 0}}]}},
         {$sort: {stock: -1}},
         {$lookup: {
             from: 'sales',
@@ -430,8 +534,8 @@ exports.getProductKonsumtif = (req, res) => {
             sku: 1,
             name: 1,
             stock: 1,
-            purchase: 1,
-            total: {$multiply: ['$purchase', '$stock']}
+            price: 1,
+            total: {$multiply: ['$price', '$stock']}
         }}
     ])
     .then(result => {
