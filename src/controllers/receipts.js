@@ -149,7 +149,7 @@ exports.insertReceipts = async (req, res) => {
         const items = result.items
         for(let i = 0; i < items.length; i ++) {
             const item = items[i]
-            await ProductModel.updateOne({_id: item.productId}, {purchase: item.purchase});
+            await ProductModel.updateOne({_id: item.productId}, {purchase: item.purchase, flow: 'Receipts', sourceFlow: receiptsNo});
             const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
             if(inventory) {
                 inventory.qty = inventory.qty + item.qty

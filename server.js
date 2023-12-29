@@ -52,6 +52,7 @@ const returnRoutes = require('./src/routers/returns');
 const mitraRoutes = require('./src/routers/mitra');
 const mitraAPIRoutes = require('./src/routers/mitraAPI');
 const analyticRoutes = require('./src/routers/analytics');
+const purchaseRoutes = require('./src/routers/purchases');
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);
@@ -89,6 +90,7 @@ app.use('/returns', authenticateToken, returnRoutes);
 app.use('/mitra', authenticateToken, mitraRoutes);
 app.use('/mitra-api', mitraAPIRoutes);
 app.use('/analytics', analyticRoutes);
+app.use('/purchases', purchaseRoutes);
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);

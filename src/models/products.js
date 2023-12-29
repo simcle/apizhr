@@ -19,6 +19,8 @@ const ProductSchema = new Schema({
     description: {type: String},
     stock: {type: Number, default: 0},
     weight: {type: Object},
+    flow: {type: String},
+    sourceFlow: {type: String, default: null},
     userCreated: {type: Schema.Types.ObjectId},
     userUpdated: {type: Schema.Types.ObjectId}
 }, {
