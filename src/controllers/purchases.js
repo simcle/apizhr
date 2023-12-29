@@ -26,7 +26,7 @@ exports.getPurchases = (req, res) => {
     let totalItems;
     let query;
     if(search) {
-        query = {$or: [{purchaseNo: search},{supplier: {$regex: '.*'+search+'.*', $options: '1'}}]}
+        query = {$or: [{purchaseNo: search},{supplier: {$regex: '.*'+search+'.*', $options: 'i'}}]}
     } else {
         query = {}
     }
@@ -106,7 +106,6 @@ exports.insertPurchase = async (req, res) => {
     const supplierId = req.body.supplierId
     const remarks = req.body.remarks
     const invoiceDate = req.body.invoiceDate
-    console.log(invoiceDate)
     const date = new Date();
     let dd = date.getDate();
     let mm = date.getMonth() +1;
@@ -170,7 +169,6 @@ exports.deleteItem = (req, res) => {
         return result.save()
     })
     .then(result => {
-        console.log(result)
         res.status(200).json(result)
     })
 }
