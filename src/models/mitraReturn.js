@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const MitraReturnSchema = new Schema({
     returnNo: {type: String},
     mitraId: {type: mongoose.Types.ObjectId},
-    shopId: {tyep: mongoose.Types.ObjectId},
+    shopId: {type: mongoose.Types.ObjectId},
     items: [
         {
             idx: {type: String},

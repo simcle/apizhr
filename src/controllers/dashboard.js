@@ -3,6 +3,7 @@ const OnlineModel = require('../models/online');
 const PengeluaranModel = require('../models/pengeluaran');
 const NgolesModel = require('../models/ngoles');
 const ResellerModel = require('../models/reseller');
+
 exports.getDashboard = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
@@ -10,6 +11,18 @@ exports.getDashboard = (req, res) => {
     const day = sevenDay.getDate() - 6
     sevenDay.setDate(day)
     sevenDay.setHours(0, 0, 0, 0)
+    
+    const start = new Date()
+    const end = new Date()
+
+    const first = start.getDate() - 13
+    start.setDate(first)
+    start.setHours(0, 0, 0, 0)
+
+    const last = end.getDate() - 6
+    end.setDate(last)
+    end.setHours(0, 0, 0, 0)
+
     const online = OnlineModel.aggregate([
         {$match: {createdAt: {$gte: today}}},
         {$group: {
@@ -66,6 +79,7 @@ exports.getDashboard = (req, res) => {
     ])
     const stats = SalesModel.aggregate([
         {$match: {createdAt: {$gte: sevenDay}}},
+        // {$match: {$and: [{createdAt: {$gte: start}}, {createdAt: {$lte: end}}]}},
         {$lookup: {
             from: 'shops',
             localField: 'shopId',
@@ -90,6 +104,7 @@ exports.getDashboard = (req, res) => {
     ])
     const onlineStat = OnlineModel.aggregate([
         {$match: {createdAt: {$gte: sevenDay}}},
+        // {$match: {$and: [{createdAt: {$gte: start}}, {createdAt: {$lte: end}}]}},
         {$group: {
             _id: {tanggal: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},
             tanggal: {$first: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},

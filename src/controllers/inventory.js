@@ -25,7 +25,6 @@ exports.getStock = (req, res) => {
 exports.getStockBarang = (req, res) => {
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
-    console.log(queryString)
     ProductModel.aggregate([
         {$match: {$text: {$search: queryString}}},
         {$project: {

@@ -8,6 +8,10 @@ router.get('/', mitraController.getSales);
 router.post('/', mitraController.insertSales);
 router.put('/', mitraController.deleteSales);
 router.get('/inventory', mitraController.getInventory);
+router.get('/shops', mitraController.getShop);
+router.get('/stock', mitraController.getStockBarang);
+router.post('/transfer', mitraController.transferStok);
+router.get('/transfer', mitraController.getTransfer);
 
 router.get('/so/sku', mitraController.getSoSku);
 router.post('/so', mitraController.insertSoInventory);

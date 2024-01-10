@@ -2,6 +2,13 @@ const mongoose = require('mongoose');
 const MitraInventoryModel = require('../models/mitraInventory');
 const MitraSaleModel = require('../models/mitraSales');
 const ProductModel = require('../models/products');
+const ShopModel = require('../models/shops');
+const MitraRetrunModel = require('../models/mitraReturn');
+const mitraInventoryModule = require('../modules/mitraInventory');
+const MitraHistoryModel = require('../models/mitraHistory');
+const InventoryModel = require('../models/inventory');
+const updateStock = require('../modules/updateStock');
+const stockCard = require('../modules/stockCard');
 
 exports.getSoSku = (req, res) => {
     const sku = req.query.sku
@@ -233,5 +240,182 @@ exports.getInventory = (req, res) => {
                 totalItems: totalItems
             }
         })
+    })
+}
+
+exports.getShop = (req, res) => {
+    ShopModel.find().lean()
+    .then(result => {
+        const data = result.map(obj => {
+            obj.text = obj.name,
+            obj.id = obj._id
+            return obj
+        })
+        res.status(200).json(data)
+    })
+}
+
+exports.getTransfer = async (req, res) => {
+    const mitraId = mongoose.Types.ObjectId(req.query.mitraId)
+    const currentPage = req.query.page || 1
+    const perPage = req.query.perPage || 20
+    let totalItems;
+    MitraRetrunModel.aggregate([
+        {$match: {$and: [{shopId: {$exists: true}}, {mitraId: mitraId}]}},
+        {$count: 'count'}
+    ])
+    .then(result => {
+        if(result.length > 0) {
+            totalItems = result[0].count
+        } else {
+            totalItems = 0
+        }
+
+        return MitraRetrunModel.aggregate([
+            {$match: {$and: [{shopId: {$exists: true}}, {mitraId: mitraId}]}},
+            {$sort: {createdAt: -1}},
+            {$skip: (currentPage -1) * perPage},
+            {$limit: perPage},
+            {$lookup: {
+                from: 'shops',
+                foreignField: '_id',
+                localField: 'shopId',
+                as: 'shop'
+            }},
+            {$unwind: '$shop'},
+            {$addFields: {
+                shop: '$shop.name'
+            }}
+        ])
+    })
+    .then(result => {
+        const last_page = Math.ceil(totalItems / perPage)
+        res.status(200).json({
+            data: result,
+            pages: {
+                current_page: currentPage,
+                last_page: last_page,
+                totalItems: totalItems
+            }
+        })
+    })
+
+}
+
+exports.transferStok = async (req, res) => {
+    const shopId = req.body.toId
+    const mitraId  = req.body.mitraId
+    const items = req.body.items
+    const grandTotal = req.body.grandTotal
+    const date = new Date();
+    let dd = date.getDate();
+    let mm = date.getMonth() +1;
+    let yy = date.getFullYear().toString().substring(2);
+    dd = checkTime(dd);
+    mm = checkTime(mm)
+    function checkTime (i) {
+        if(i < 10) {
+            i = `0${i}`
+        }
+        return i
+    }
+    let today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    let retur = await MitraRetrunModel.findOne({createdAt: {$gte: today}}).sort({createdAt: -1})
+    let returnNo;
+    if(retur) {
+        const no = retur.returnNo.substring(16)
+        const newNo = parseInt(no)+1
+        returnNo = `${dd}${mm}/MTR/KBL/${yy}/${newNo}`
+    } else {
+        returnNo = `${dd}${mm}/MTR/KBL/${yy}/1`
+    }
+    retur = new MitraRetrunModel({
+        returnNo: returnNo,
+        mitraId: mitraId,
+        shopId: shopId,
+        items: items,
+        grandTotal: grandTotal,
+        note: req.body.note
+    })
+    retur.save()
+    .then( async (result) => {
+        const mitraHistory = new MitraHistoryModel({
+            documentNo: returnNo,
+            type: 'Kembali Barang',
+            mitraId: mitraId,
+            shopId: shopId,
+            items: result.items,
+            grandTotal: grandTotal
+        })
+        await mitraHistory.save()
+        let documentId = result._id
+        const items = result.items
+        for(let i = 0; i < items.length; i ++) {
+            const item = items[i]
+            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
+            if(inventory) {
+                inventory.qty = inventory.qty + item.qty
+                await inventory.save()
+            } else {
+                await InventoryModel.create({shopId: shopId, productId: item.productId, qty: 0})
+            }
+            const balance = await updateStock(item.productId)
+            await stockCard('in', shopId, item.productId, documentId, 'Mitra', item.qty, balance.stock)
+            await mitraInventoryModule('return', mitraId, item)
+        }
+        res.status(200).json(result)
+    })
+}
+
+exports.getStockBarang = (req, res) => {
+    const search = req.query.search
+    var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
+    ProductModel.aggregate([
+        {$match: {$text: {$search: queryString}}},
+        {$project: {
+            _id: 1,
+            sku: 1,
+            name: 1,
+            score: {$meta: 'textScore'}
+        }},
+        {$sort: {score: -1}},
+        {$lookup: {
+            from: 'inventories',
+            localField: '_id',
+            foreignField: 'productId',
+            as: 'inventory'
+        }},
+        {$project: {
+            _id: 0,
+            name: 1,
+            sku: 1,
+            inventory: 1,
+            score: 1
+        }},
+        {$unwind: '$inventory'},
+        {$replaceRoot: {newRoot: {$mergeObjects: ['$$ROOT', '$inventory']}}},
+        {$project: {
+            _id: 1,
+            name: 1,
+            sku: 1,
+            shopId: 1,
+            productId: 1,
+            qty: 1,
+            score: 1
+        }},
+        {$lookup: {
+            from: 'shops',
+            localField: 'shopId',
+            foreignField: '_id',
+            as: 'shop'
+        }},
+        {$unwind: '$shop'},
+        {$addFields: {
+            shop: '$shop.name'
+        }},
+        {$limit: 10}
+    ])
+    .then(result => {
+        res.status(200).json(result)
     })
 }
