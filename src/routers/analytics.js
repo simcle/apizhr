@@ -11,5 +11,5 @@ router.get('/products/sku', analyticsController.getAnalyticSKU)
 router.get('/products/download/sku', analyticsController.downloadAnalyticSKU);
 router.get('/products/consumptive', analyticsController.getProductKonsumtif);
 router.get('/products/task-so', analyticsController.taskStockOpname);
-
+router.get('/report', analyticsController.getReport);
 module.exports = router;

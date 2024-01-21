@@ -4,7 +4,9 @@ const ReceiptsModel = require('../models/receipts');
 const CategoryModel = require('../models/categories');
 const ShopModel = require('../models/shops');
 const ProductModel = require('../models/products');
+const PurchaseModel = require('../models/purchases');
 const excel = require('exceljs');
+const moment = require('moment');
 
 exports.getShop = (req, res) => {
     ShopModel.find().sort({name: 1}).lean()
@@ -537,6 +539,57 @@ exports.getProductKonsumtif = (req, res) => {
             price: 1,
             total: {$multiply: ['$price', '$stock']}
         }}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
+exports.getReport = (req, res) => {
+    const date = moment().subtract(29, 'day').toDate()
+    PurchaseModel.aggregate([
+        {$match: {createdAt: {$gte: date}}},
+        {$project: {
+            items: 1
+        }},
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$items.productId',
+            name: {$first: '$items.name'},
+            sku: {$first: '$items.sku'},
+            qty: {$sum: '$items.qty'}
+        }},
+        {$lookup: {
+            from: 'receipts',
+            let: {'itemId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {$gte: ['$createdAt', date]}
+                }},
+                {$unwind: '$items'},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {$eq: ['$_id', '$$itemId']}
+                }},
+            ],
+            as: 'receipt'
+        }},
+        {$sort: {qty: -1}},
+        {$unwind: '$receipt'},
+        {$match: {$expr: {$gt: ['$qty', '$receipt.qty']}}},
+        {$limit: 50},
+        // {$addFields: {
+        //     receipt:{
+        //         $cond: [
+        //             {$ifNull: ['$receipt', false]},'$receipt.qty', 0
+        //         ]
+        //     }
+        // }},
+        {$sort: {qty: -1}},
+        {$limit: 50},
     ])
     .then(result => {
         res.status(200).json(result)
