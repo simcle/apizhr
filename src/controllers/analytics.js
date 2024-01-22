@@ -546,7 +546,7 @@ exports.getProductKonsumtif = (req, res) => {
 }
 
 exports.getReport = (req, res) => {
-    const date = moment().subtract(29, 'day').toDate()
+    const date = moment().subtract(59, 'day').toDate()
     PurchaseModel.aggregate([
         {$match: {createdAt: {$gte: date}}},
         {$project: {
@@ -580,16 +580,120 @@ exports.getReport = (req, res) => {
         {$sort: {qty: -1}},
         {$unwind: '$receipt'},
         {$match: {$expr: {$gt: ['$qty', '$receipt.qty']}}},
-        {$limit: 50},
-        // {$addFields: {
-        //     receipt:{
-        //         $cond: [
-        //             {$ifNull: ['$receipt', false]},'$receipt.qty', 0
-        //         ]
-        //     }
-        // }},
-        {$sort: {qty: -1}},
-        {$limit: 50},
+        // {$limit: 50},
+        
+        {$lookup: {
+            from: 'sales',
+            let: {'itemId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {$gte: ['$createdAt', date]}
+                }},
+                {$unwind: '$items'},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {$eq: ['$_id', '$$itemId']}
+                }},
+            ],
+            as: 'sales'
+        }},
+        {$unwind: {
+            path: '$sales',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$lookup: {
+            from: 'onlines',
+            let: {'itemId': '$_id'},
+            pipeline: [
+                {$match: {
+                    $expr: {$gte: ['$createdAt', date]}
+                }},
+                {$unwind: '$items'},
+                {$group: {
+                    _id: '$items.productId',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {$eq: ['$_id', '$$itemId']}
+                }},
+            ],
+            as: 'online'
+        }},
+        {$unwind: {
+            path: '$online',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$lookup: {
+            from: 'mitrapayments',
+            let: {'sku': '$sku'},
+            pipeline: [
+                {$match: {
+                    $expr: {$gte: ['$createdAt', date]}
+                }},
+                {$unwind: '$items'},
+                {$group: {
+                    _id: '$items.sku',
+                    qty: {$sum: '$items.qty'}
+                }},
+                {$match: {
+                    $expr: {$eq: ['$_id', '$$sku']}
+                }},
+            ],
+            as: 'mitra'
+        }},
+        {$unwind: {
+            path: '$mitra',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$lookup: {
+            from: 'products',
+            foreignField: '_id',
+            localField: '_id',
+            as: 'product'
+        }},
+        {$unwind: {
+            path: '$product',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            stock: '$product.stock',
+            harga: '$product.price',
+            receipt:{
+                $cond: [
+                    {$ifNull: ['$receipt', false]},'$receipt.qty', 0
+                ]
+            },
+            sales:{
+                $cond: [
+                    {$ifNull: ['$sales', false]},'$sales.qty', 0
+                ]
+            },
+            online:{
+                $cond: [
+                    {$ifNull: ['$online', false]},'$online.qty', 0
+                ]
+            },
+            mitra:{
+                $cond: [
+                    {$ifNull: ['$mitra', false]},'$mitra.qty', 0
+                ]
+            },
+        }},
+        {$project: {
+            _id: 1,
+            name: 1,
+            sku: 1,
+            stock: 1,
+            harga: 1,
+            mitra: 1,
+            permintaan: '$qty',
+            pemenuhan: '$receipt',
+            penjualan: {$sum: ['$online', '$sales', '$mitra']},
+            lost: {$sum: ['$online', '$sales', '$mitra']},
+        }}
     ])
     .then(result => {
         res.status(200).json(result)
