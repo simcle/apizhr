@@ -5,5 +5,9 @@ const reportController = require('../controllers/report')
 
 router.get('/', reportController.getDashboard);
 router.get('/statistic-offline', reportController.getStatisticsOffline)
+router.get('/statistic-online', reportController.getStatisticsOnline);
+router.get('/statistic-yearly', reportController.getStatisticsOneYear);
+router.get('/best-seller', reportController.getBestSeller);
+router.get('/detail/:sku', reportController.getDetailProduct);
 
 module.exports = router

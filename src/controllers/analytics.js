@@ -141,7 +141,7 @@ exports.getProducts = (req, res) => {
 
 exports.detailProducts = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.query.productId)
-    const filter = req.query.time
+    const filter = req.query.filter
     const date = new Date();
     if(filter == '1D') {
         date.setHours(0, 0, 0, 0)
@@ -321,12 +321,44 @@ exports.getAnalyticSKU = (req, res) => {
                     path: '$sold',
                     preserveNullAndEmptyArrays: true
                 }},
+                {$lookup: {
+                    from: 'onlines',
+                    let: {'itemId': '$_id'},
+                    pipeline: [
+                        {$match: {
+                            $expr: {$gte: ['$createdAt', date]}
+                        }},
+                        {$unwind: '$items'},
+                        {$match: {
+                            $expr: {
+                                $eq: ['$items.productId', '$$itemId']
+                            }
+                        }},
+                        {$group: {
+                            _id: '$items.productId',
+                            qty: {$sum: '$items.qty'}
+                        }}
+                    ],
+                    as: 'online' 
+                }},
+                {$unwind: {
+                    path: '$online',
+                    preserveNullAndEmptyArrays: true
+                }},
                 {$addFields: {
                     sold: {
                         $cond: [
                             {$ifNull: ['$sold', false]},'$sold.qty', 0
                         ]
+                    },
+                    online: {
+                        $cond: [
+                            {$ifNull: ['$online', false]},'$online.qty', 0
+                        ]
                     }
+                }},
+                {$addFields: {
+                    sold: {$sum: ['$online', '$sold']}
                 }},
                 {$sort: {sold: -1}}
             ])
@@ -404,12 +436,44 @@ exports.downloadAnalyticSKU = (req, res) => {
                     path: '$sold',
                     preserveNullAndEmptyArrays: true
                 }},
+                {$lookup: {
+                    from: 'onlines',
+                    let: {'itemId': '$_id'},
+                    pipeline: [
+                        {$match: {
+                            $expr: {$gte: ['$createdAt', date]}
+                        }},
+                        {$unwind: '$items'},
+                        {$match: {
+                            $expr: {
+                                $eq: ['$items.productId', '$$itemId']
+                            }
+                        }},
+                        {$group: {
+                            _id: '$items.productId',
+                            qty: {$sum: '$items.qty'}
+                        }}
+                    ],
+                    as: 'online' 
+                }},
+                {$unwind: {
+                    path: '$online',
+                    preserveNullAndEmptyArrays: true
+                }},
                 {$addFields: {
                     sold: {
                         $cond: [
                             {$ifNull: ['$sold', false]},'$sold.qty', 0
                         ]
+                    },
+                    online: {
+                        $cond: [
+                            {$ifNull: ['$online', false]},'$online.qty', 0
+                        ]
                     }
+                }},
+                {$addFields: {
+                    sold: {$sum: ['$online', '$sold']}
                 }},
                 {$sort: {sold: -1}}
             ])
