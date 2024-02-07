@@ -17,6 +17,7 @@ const PurchaseSchema = new Schema({
             total: {type: Number}
         }
     ],
+    images: {type: Array},
     remarks: {type: String},
     status: {type: String}
 }, {

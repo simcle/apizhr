@@ -106,6 +106,7 @@ exports.insertPurchase = async (req, res) => {
     const supplierId = req.body.supplierId
     const remarks = req.body.remarks
     const invoiceDate = req.body.invoiceDate
+    const images = req.body.images
     const date = new Date();
     let dd = date.getDate();
     let mm = date.getMonth() +1;
@@ -135,7 +136,8 @@ exports.insertPurchase = async (req, res) => {
         invoiceDate: invoiceDate,
         items: items,
         remarks: remarks,
-        status: 'RFQ'
+        status: 'RFQ',
+        images: images
     })
     purchase.save()
     .then(async () => {
@@ -182,6 +184,7 @@ exports.updatePurchase = (req, res) => {
             result.status = status
             result.remarks = req.body.remarks
             result.invoiceDate = req.body.invoiceDate
+            result.images = req.body.images
         }
         return result.save()
     })
