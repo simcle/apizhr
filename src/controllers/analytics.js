@@ -141,7 +141,7 @@ exports.getProducts = (req, res) => {
 
 exports.detailProducts = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.query.productId)
-    const filter = req.query.filter
+    const filter = req.query.time
     const date = new Date();
     if(filter == '1D') {
         date.setHours(0, 0, 0, 0)
@@ -181,7 +181,7 @@ exports.detailProducts = (req, res) => {
                 }},
                 {$unwind: '$items'},
                 {$project: {
-                    items: 1
+                    items: 1,
                 }},
                 {$match: {
                     $expr: {

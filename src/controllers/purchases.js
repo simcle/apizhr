@@ -31,6 +31,16 @@ exports.getPurchases = (req, res) => {
         query = {}
     }
     PurchaseModel.aggregate([
+        {$project: {
+            _id: 1,
+            supplierId: 1,
+            purchaseNo: 1,
+            invoiceDate: 1,
+            status: 1,
+            createdAt: 1,
+            remarks: 1,
+            items: 1
+        }},
         {$lookup: {
             from: 'suppliers',
             foreignField: '_id',
@@ -39,43 +49,21 @@ exports.getPurchases = (req, res) => {
         }},
         {$unwind: '$supplier'},
         {$addFields: {
-            supplier: '$supplier.name'
+            supplier: '$supplier.name',
+            total: {$sum: '$items.total'}
         }},
         {$match: query},
-        {$count: 'count'}
+        {$sort: {createdAt: -1}},
+        {$skip: (currentPage -1) * perPage},
+        {$limit: perPage},
     ])
     .then(result => {
-        if(result.length > 0) {
-            totalItems = result[0].count
-        } else {
-            totalItems = 0
-        }
-        return PurchaseModel.aggregate([
-            {$lookup: {
-                from: 'suppliers',
-                foreignField: '_id',
-                localField: 'supplierId',
-                as: 'supplier'
-            }},
-            {$unwind: '$supplier'},
-            {$addFields: {
-                supplier: '$supplier.name',
-                total: {$sum: '$items.total'}
-            }},
-            {$match: query},
-            {$sort: {createdAt: -1}},
-            {$skip: (currentPage -1) * perPage},
-            {$limit: perPage},
-        ])
-    })
-    .then (result => {
         const last_page = Math.ceil(totalItems / perPage)
         res.status(200).json({
             data: result,
             pages: {
                 current_page: currentPage,
                 last_page: last_page,
-                totalItems: totalItems
             }
         })
     })
