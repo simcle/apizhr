@@ -5,6 +5,7 @@ const salesController = require('../controllers/sales');
 
 router.get('/', salesController.getSales);
 router.get('/:salesId', salesController.getDetailSales);
+router.post('/draft', salesController.insertDraft);
 router.post('/', salesController.insertSales);
 router.put('/', salesController.updateSales);
 router.get('/report/best', salesController.getBestSales);

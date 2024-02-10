@@ -169,6 +169,7 @@ exports.updatePurchase = (req, res) => {
     PurchaseModel.findById(purchaseId)
     .then(result => {
         if(status) {
+            result.supplierId = req.body.supplierId
             result.status = status
             result.remarks = req.body.remarks
             result.invoiceDate = req.body.invoiceDate

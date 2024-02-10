@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const SalesModel = require('../models/sales');
+const DraftSalesModel = require('../models/draftSales');
 const OnlineModel = require('../models/online');
 const productModel = require('../models/products');
 const InventoryModel = require('../models/inventory');
@@ -342,6 +343,28 @@ exports.getDetailSales = (req, res) => {
     })
 }
 
+exports.insertDraft = async (req, res) => {
+    const shopId = req.user.shopId
+    let no;
+    let draftNo = await DraftSalesModel.findOne({shopId: shopId}).sort({createdAt: -1})
+    if(draftNo) {
+        no = parseInt(draftNo.no) + 1
+    } else {
+        no = 1
+    }
+    const draft = new DraftSalesModel({
+        no: no,
+        shopId: shopId,
+        items: req.body.items
+    })
+    draft.save()
+    .then(() => {
+        DraftSalesModel.find({shopId: shopId}).countDocuments()
+        .then(result => {
+            res.status(200).json(result)
+        })
+    })
+}
 exports.insertSales = async (req, res) => {
     const shopId = req.user.shopId
     const userId = req.user._id
