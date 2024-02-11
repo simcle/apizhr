@@ -345,6 +345,7 @@ exports.getDetailSales = (req, res) => {
 
 exports.insertDraft = async (req, res) => {
     const shopId = req.user.shopId
+    const draftId = req.body.draftId
     let no;
     let draftNo = await DraftSalesModel.findOne({shopId: shopId}).sort({createdAt: -1})
     if(draftNo) {
@@ -352,22 +353,56 @@ exports.insertDraft = async (req, res) => {
     } else {
         no = 1
     }
-    const draft = new DraftSalesModel({
-        no: no,
-        shopId: shopId,
-        items: req.body.items
-    })
-    draft.save()
-    .then(() => {
-        DraftSalesModel.find({shopId: shopId}).countDocuments()
-        .then(result => {
-            res.status(200).json(result)
+    if(!draftId) {
+        const draft = new DraftSalesModel({
+            no: no,
+            shopId: shopId,
+            items: req.body.items,
+            grandTotal: req.body.grandTotal
         })
+        draft.save()
+        .then(() => {
+            DraftSalesModel.find({shopId: shopId})
+            .then(result => {
+                res.status(200).json(result)
+            })
+        })
+    } else {
+        DraftSalesModel.updateOne({_id: draftId}, {$set: {
+            items: req.body.items,
+            grandTotal: req.body.grandTotal
+        }})
+        .then(() => {
+            DraftSalesModel.find({shopId: shopId})
+            .then(result => {
+                res.status(200).json(result)
+            })
+        })
+    }
+}
+exports.getDraft = (req, res) => {
+    const shopId = req.user.shopId
+    DraftSalesModel.find({shopId: shopId})
+    .then(result => {
+        res.status(200).json(result)
     })
 }
+exports.deleteDraft = (req, res) => {
+    const shopId = req.user.shopId
+    const id = req.params.id
+    DraftSalesModel.deleteOne({_id: id})
+    .then(() => {
+        return DraftSalesModel.find({shopId: shopId})
+    })
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
+
 exports.insertSales = async (req, res) => {
     const shopId = req.user.shopId
     const userId = req.user._id
+    const draftId = req.body.draftId
     const date = new Date();
     let dd = date.getDate();
     let mm = date.getMonth() +1;
@@ -406,6 +441,9 @@ exports.insertSales = async (req, res) => {
     })
     sales.save()
     .then( async (result) => {
+        if(draftId) {
+            await DraftSalesModel.deleteOne({_id: draftId})
+        }
         let documentId = result._id
         const items = result.items
         for(let i = 0; i < items.length; i ++) {

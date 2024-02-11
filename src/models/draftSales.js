@@ -20,6 +20,7 @@ const draftSalesSchema = new Schema(
                 subTotal: {type: Number}
             }
         ],
+        grandTotal: {type: Number}
     }, {
         timestamps: true
     }

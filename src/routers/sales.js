@@ -6,6 +6,8 @@ const salesController = require('../controllers/sales');
 router.get('/', salesController.getSales);
 router.get('/:salesId', salesController.getDetailSales);
 router.post('/draft', salesController.insertDraft);
+router.get('/data/draft', salesController.getDraft);
+router.delete('/draft/:id', salesController.deleteDraft);
 router.post('/', salesController.insertSales);
 router.put('/', salesController.updateSales);
 router.get('/report/best', salesController.getBestSales);
