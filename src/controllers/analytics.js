@@ -133,8 +133,66 @@ exports.getProducts = (req, res) => {
                 res.status(200).json(result)
             })
             break;
-        case 'stock':    
-            console.log(sortKey)
+        case 'stock':  
+        SalesModel.aggregate([
+            {$match: byDate},
+            {$unwind: '$items'},
+            {$group: {
+                _id: '$items.productId',
+                sold: {$sum: '$items.qty'}
+            }},
+            {$lookup: {
+                from: 'products',
+                let: {'itemId': '$_id'},
+                pipeline: [
+                    {$match: {
+                        $expr: {
+                            $eq: ['$_id', '$$itemId']
+                        }
+                    }},
+                    {$project: {
+                        _id: 0,
+                        name: 1,
+                        sku: 1,
+                        categoryId: 1
+                    }}
+                ],
+                as: 'product'
+            }},
+            {$unwind: '$product'},
+            {$addFields: {
+                name: '$product.name',
+                sku: '$product.sku',
+                categoryId: '$product.categoryId'
+            }},
+            {$unset: 'product'},
+            {$match: query},
+            {$limit: 50},
+            {$lookup: {
+                from: 'inventories',
+                let: {'itemId': '$_id'},
+                pipeline: [
+                    {$match: {
+                        $expr: {
+                            $eq: ['$productId', '$$itemId']
+                        }
+                    }},
+                    {$group: {
+                        _id: '$productId',
+                        stock: {$sum: '$qty'}
+                    }}
+                ],
+                as: 'stock'
+            }},
+            {$unwind: '$stock'},
+            {$addFields: {
+                stock: '$stock.stock'
+            }},
+            {$sort: {stock: sortOrder, sold: -1}}, 
+        ]) 
+        .then(async (result) => {
+            res.status(200).json(result)
+        })
         break;
     }
 }
