@@ -21,14 +21,15 @@ exports.getProduct = (req, res) => {
 
 exports.getPurchases = (req, res) => {
     const search = req.query.search
+    const status = req.query.status
     const currentPage = req.query.page || 1
     const perPage = req.query.perPage || 20
     let totalItems;
     let query;
     if(search) {
-        query = {$or: [{purchaseNo: search},{supplier: {$regex: '.*'+search+'.*', $options: 'i'}}]}
+        query = {$and: [{status: status}, {$or: [{purchaseNo: search}, {supplier: {$regex: '.*'+search+'.*', $options: 'i'}}, {remarks: {$regex: '.*'+search+'.*', $options: 'i'}}]}]}
     } else {
-        query = {}
+        query = {status: status}
     }
     PurchaseModel.aggregate([
         {$project: {
@@ -36,7 +37,7 @@ exports.getPurchases = (req, res) => {
             supplierId: 1,
             purchaseNo: 1,
             invoiceDate: 1,
-            status: 1,
+            status: 1, 
             createdAt: 1,
             remarks: 1,
             items: 1
