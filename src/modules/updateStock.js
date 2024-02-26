@@ -16,10 +16,10 @@ module.exports = async (id) => {
     ])
     const product = await Product.findById(result[0]._id)
     product.stock = result[0].qty
-    if(result[0].qty <= 3) {
-        pusher.trigger("notif", product, {
-            message: "Stok akan segera habis"
-        });
-    }
+    // if(result[0].qty <= 3) {
+    //     pusher.trigger("notif", product, {
+    //         message: "Stok akan segera habis"
+    //     });
+    // }
     return product.save();
 }

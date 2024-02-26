@@ -182,3 +182,12 @@ exports.updatePurchase = (req, res) => {
         res.status(200).json('OK')
     })
 }
+
+exports.deletePurchase = (req, res) => {
+    const purchaseId = req.params.purchaseId
+    console.log(purchaseId)
+    PurchaseModel.deleteOne({_id: purchaseId})
+    .then(() => {
+        res.status(200).json('OK')
+    })
+}
