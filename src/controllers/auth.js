@@ -44,7 +44,8 @@ exports.getUsers = (req, res) => {
 // get user 
 exports.getMe = (req, res) => {
     const userId = req.user._id
-    User.findById(userId).select('name email role')
+    User.findById(userId)
+    .select('name email role')
     .then(result => {
         res.status(200).json(result)
     })
