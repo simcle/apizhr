@@ -668,7 +668,7 @@ exports.getProductKonsumtif = (req, res) => {
 }
 
 exports.getReport = (req, res) => {
-    const date = moment().subtract(59, 'day').toDate()
+    const date = moment().subtract(29, 'day').toDate()
     PurchaseModel.aggregate([
         {$match: {createdAt: {$gte: date}}},
         {$project: {

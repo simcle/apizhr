@@ -1,7 +1,11 @@
 const SupplierModel = require('../models/supplier');
 const ProductModel = require('../models/products');
 const PurchaseModel = require('../models/purchases');
-const { default: mongoose } = require('mongoose');
+const ReceiptModel = require('../models/receipts');
+
+const mongoose = require('mongoose')
+const excel = require('exceljs');
+const moment = require('moment');
 
 exports.getSuppliers = (req, res) => {
     const search = req.query.search
@@ -51,7 +55,7 @@ exports.getPurchases = (req, res) => {
         {$unwind: '$supplier'},
         {$addFields: {
             supplier: '$supplier.name',
-            total: {$sum: '$items.total'}
+            total: {$sum: '$items.qty'}
         }},
         {$match: query},
         {$sort: {createdAt: -1}},
@@ -189,5 +193,76 @@ exports.deletePurchase = (req, res) => {
     PurchaseModel.deleteOne({_id: purchaseId})
     .then(() => {
         res.status(200).json('OK')
+    })
+}
+
+exports.downloadPurchase = async (req, res) => {
+    const supplierId = mongoose.Types.ObjectId('65b5cd6ea0fd4820be25dc16')
+    PurchaseModel.aggregate([
+        {$match: {$and: [{supplierId: supplierId}, {status: 'RFQ SENT'}]}},
+        {$unwind: '$items'},
+        {$project: {
+            items: 1
+        }},
+        {$addFields: {
+            sku: '$items.sku',
+            name: '$items.name',
+            qty: '$items.qty'
+        }},
+        {$unset: 'items'}
+    ])
+    .then(async (result) => {
+        let workbook = new excel.Workbook()
+        let worksheet = workbook.addWorksheet('Laporan')
+        worksheet.columns = [
+            {key: 'sku', width: 10},
+            {key: 'name', width: 45},
+            {key: 'qty',  width: 10},
+        ]
+        console.log(result)
+        worksheet.getRow(1).values = ['PERMINTAAN BARANG', ``]
+        worksheet.getRow(3).values = ['SKU', 'ITEM', 'QTY']
+        worksheet.addRows(result)
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            "attachment; filename=" + "tutorials.xlsx"
+        );
+        await workbook.xlsx.write(res);
+        res.status(200).end();
+    })
+}
+
+exports.getReport = (req, res) => {
+    const date = moment().subtract(6, 'day').toDate()
+    PurchaseModel.aggregate([
+        {$match: {createdAt: {$gte: date}}},
+        {$project: {
+            items: 1,
+            supplierId: 1
+        }},
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$supplierId',
+            purchase: {$sum: '$purchase'},
+            purchase: {$sum: '$items.qty'},
+        }},
+        {$lookup: {
+            from: 'suppliers',
+            foreignField: '_id',
+            localField: '_id',
+            as: 'supplier'
+        }},
+        {$unwind: '$supplier'},
+        {$addFields: {
+            supplier: '$supplier.name'
+        }},
+    ])
+    .then(result => {
+        console.log(result)
+        res.status(200).json(result)
     })
 }

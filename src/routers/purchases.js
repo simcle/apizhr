@@ -13,4 +13,7 @@ router.put('/delete/:purchaseId', purchaseController.deleteItem);
 router.put('/update/:purchaseId', purchaseController.updatePurchase);
 router.delete('/delete/:purchaseId', purchaseController.deletePurchase);
 
+router.get('/download', purchaseController.downloadPurchase);
+router.get('/report', purchaseController.getReport);
+
 module.exports = router;
