@@ -541,11 +541,12 @@ exports.downloadAnalyticSKU = (req, res) => {
                 worksheet.columns = [
                     {key: 'sku', width: 10},
                     {key: 'name', width: 45},
+                    {key: 'flow', width: 20},
                     {key: 'sold',  width: 10},
                     {key: 'stock',  width: 10},
                 ]
                 worksheet.getRow(1).values = ['ANALYTICS ITEMS', ``]
-                worksheet.getRow(3).values = ['SKU', 'ITEM', 'SOLD', 'STOCK']
+                worksheet.getRow(3).values = ['SKU', 'ITEM','FLOW', 'SOLD', 'STOCK']
                 worksheet.addRows(result)
                 res.setHeader(
                     "Content-Type",
