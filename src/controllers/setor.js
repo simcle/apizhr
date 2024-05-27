@@ -45,6 +45,7 @@ exports.getSetor = (req, res) => {
         const totalMitra = result[3][0]
         const data = {
             totalTunai: 0,
+            totalMitra: 0,
             totalPengeluaran: 0,
             totalSetor: []
         }
