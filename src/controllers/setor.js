@@ -7,7 +7,7 @@ exports.getSetor = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const totalTunai = SalesModel.aggregate([
-        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}, {paymentMethod: 'MULTI BAYAR'}]}},
+        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: {$in: ['TUNAI', 'MULTI BAYAR']}}]}},
         {$group: {
             _id: null,
             total: {$sum: '$cash'}
@@ -86,7 +86,7 @@ exports.getLaporan = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const shops = SalesModel.aggregate([
-        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}, {paymentMethod: 'MULTI BAYAR'}]}},
+        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: {$in: ['TUNAI', 'MULTI BAYAR']}}]}},
         {$group: {
             _id: '$shopId',
             total: {$sum: '$cash'}
