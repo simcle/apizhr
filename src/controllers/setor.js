@@ -7,10 +7,10 @@ exports.getSetor = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const totalTunai = SalesModel.aggregate([
-        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}]}},
+        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}, {paymentMethod: 'MULTI BAYAR'}]}},
         {$group: {
             _id: null,
-            total: {$sum: '$grandTotal'}
+            total: {$sum: '$cash'}
         }}
     ])
     const shopId = new mongoose.Types.ObjectId('647aa84733581aaca9c7725b')
@@ -86,10 +86,10 @@ exports.getLaporan = (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const shops = SalesModel.aggregate([
-        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}]}},
+        {$match: {$and: [{createdAt: {$gte: today}}, {paymentMethod: 'TUNAI'}, {paymentMethod: 'MULTI BAYAR'}]}},
         {$group: {
             _id: '$shopId',
-            total: {$sum: '$grandTotal'}
+            total: {$sum: '$cash'}
         }},
         {$sort: {total: -1}},
         {$lookup: {
