@@ -97,6 +97,47 @@ exports.getStats = (req, res)=> {
             createdAt: 1,
             qty: 1
         }},
+        {$match: {'tahun': tahun}},
+        {$group: {
+            _id: {$dateToString: {format: "%Y-%m", date: '$createdAt'}},
+            bulan: {$first: '$bulan'},
+            tahun: {$first: '$tahun'},
+            total: {$sum: '$qty'},
+        }},
+        {$sort: {_id: 1}}
+    ])
+    const barangTerjual = SalesModel.aggregate([
+        {$unwind: '$items'},
+        {$addFields: {
+            qty: '$items.qty'
+        }},
+        {$project: {
+            tahun: {$year: '$createdAt'},
+            bulan: {$month: '$createdAt'},
+            createdAt: 1,
+            qty: 1
+        }},
+        {$match: {'tahun': tahun}},
+        {$group: {
+            _id: {$dateToString: {format: "%Y-%m", date: '$createdAt'}},
+            bulan: {$first: '$bulan'},
+            tahun: {$first: '$tahun'},
+            total: {$sum: '$qty'},
+        }},
+        {$sort: {_id: 1}}
+    ]) 
+    const onlineTerjual = OnlineModel.aggregate([
+        {$unwind: '$items'},
+        {$addFields: {
+            qty: '$items.qty'
+        }},
+        {$project: {
+            tahun: {$year: '$createdAt'},
+            bulan: {$month: '$createdAt'},
+            createdAt: 1,
+            qty: 1
+        }},
+        {$match: {'tahun': tahun}},
         {$group: {
             _id: {$dateToString: {format: "%Y-%m", date: '$createdAt'}},
             bulan: {$first: '$bulan'},
@@ -111,7 +152,9 @@ exports.getStats = (req, res)=> {
         ngoles,
         reseller,
         pengeluaran,
-        barangaMasuk
+        barangaMasuk,
+        barangTerjual,
+        onlineTerjual
     ])
     .then(result => {
         const sales = result[0]
@@ -120,6 +163,8 @@ exports.getStats = (req, res)=> {
         const reseller = result[3]
         const pengeluaran = result[4]
         const barangaMasuk = result[5]
+        const barangTerjual = result[6]
+        const onlineTerjual = result[7]
         const pendapatan = []
         for (let i = 0; i < sales.length; i++) {
             const sale = sales[i]
@@ -147,7 +192,7 @@ exports.getStats = (req, res)=> {
         const month = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
         for (let i = 0; i < month.length; i ++) {
             const a = i +1
-            data.push({bulan: month[i], pendapatan: 0, pengeluaran: 0, barangMasuk: 0})
+            data.push({bulan: month[i], pendapatan: 0, pengeluaran: 0, barangMasuk: 0, barangTerjual: 0})
             for(let p = 0; p < pendapatan.length; p++) {
                 const pnd = pendapatan[p]
                 if(pnd.bulan == a) {
@@ -164,6 +209,18 @@ exports.getStats = (req, res)=> {
                 const bm = barangaMasuk[m]
                 if(bm.bulan == a) {
                     data[i].barangMasuk = bm.total
+                }
+            }
+            for(let j = 0; j < barangTerjual.length; j++) {
+                const bj = barangTerjual[j]
+                if(bj.bulan == a) {
+                    data[i].barangTerjual = bj.total
+                }
+            }
+            for(let o = 0; o < onlineTerjual.length; o++) {
+                const ol = onlineTerjual[o];
+                if(ol.bulan == a) {
+                    data[i].barangTerjual += ol.total
                 }
             }
         }

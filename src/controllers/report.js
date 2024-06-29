@@ -3,6 +3,7 @@ const OnlineModel = require('../models/online');
 const MitraPaymentModel = require('../models/mitraPayment');
 const ShopModel = require('../models/shops');
 const ProductModel = require('../models/products');
+const categoryModel = require('../models/categories');
 
 const mongoose = require('mongoose');
 const moment = require('moment')
@@ -525,4 +526,74 @@ exports.getDetailProduct = async (req, res) => {
             mitra: result[2]
         })
     })
+}
+
+exports.getCategorySales = async (req, res) => {
+    const filter = req.query.filter
+    let day;
+    const date = new Date();
+    if(filter == '1D') {
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '7D') {
+        day = date.getDate() - 6
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '30D') {
+        day = date.getDate() - 29
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '90D') {
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+    if(filter == '1Y') {
+        day = date.getDate() - 359
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+    }
+
+    salesModel.aggregate([
+        {$match: {createdAt: {$gte: date}}},
+        {$unwind: '$items'},
+        {$unionWith: {coll: 'onlines', pipeline: [{$match: {createdAt: {$gte: date}}}, {$unwind: '$items'}]}},
+        {$group: {
+            _id: '$items.productId',
+            count: {$sum: '$items.qty'},
+            total: {$sum: '$items.total'}
+        }},
+        {$lookup: {
+            from: 'products',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'products'
+        }},
+        {$unwind: '$products'},
+        {$group: {
+            _id: '$products.categoryId',
+            count: {$sum: '$count'},
+            total: {$sum: '$total'}
+        }},
+        {$sort: {count: -1}},
+        {$lookup: {
+            from: 'categories',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'categories'
+        }},
+        {$unwind: '$categories'},
+        {$project: {
+            _id: 1,
+            category: '$categories.name',
+            count: 1,
+            total: 1
+        }},
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+    
 }

@@ -9,5 +9,6 @@ router.get('/statistic-online', reportController.getStatisticsOnline);
 router.get('/statistic-yearly', reportController.getStatisticsOneYear);
 router.get('/best-seller', reportController.getBestSeller);
 router.get('/detail/:sku', reportController.getDetailProduct);
+router.get('/best-category', reportController.getCategorySales);
 
 module.exports = router
