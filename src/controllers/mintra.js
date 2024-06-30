@@ -27,6 +27,9 @@ exports.getHistory = (req, res) => {
         }
         return MitraHistoryModel.aggregate([
             {$match: {shopId: shopId}},
+            {$sort: {createdAt: -1}},
+            {$skip: (currentPage-1) * perPage},
+            {$limit: perPage},
             {$lookup: {
                 from: 'mitras',
                 localField: 'mitraId',
@@ -36,10 +39,7 @@ exports.getHistory = (req, res) => {
             {$unwind: '$mitra'},
             {$addFields: {
                 mitra: '$mitra.name'
-            }},
-            {$sort: {createdAt: -1}},
-            {$skip: (currentPage-1) * perPage},
-            {$limit: perPage},
+            }}
         ])
     })
     .then(result => {

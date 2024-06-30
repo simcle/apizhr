@@ -169,6 +169,7 @@ exports.getSales = (req, res) => {
         {$count: 'count'}
     ])
     const sales = OnlineModel.aggregate([
+        {$sort: {createdAt: -1}},
         {$lookup: {
             from: 'banks',
             foreignField: '_id',
@@ -223,7 +224,6 @@ exports.getSales = (req, res) => {
             shippingLogo: '$shippingLogo.logo'
         }},
         {$match: query},
-        {$sort: {createdAt: -1}},
         {$skip: (currentPage-1) * perPage},
         {$limit: perPage},
     ])

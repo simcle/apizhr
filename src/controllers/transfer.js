@@ -16,6 +16,9 @@ exports.getShopTransfer = (req, res) => {
         totalItems = count
         return TransferModle.aggregate([
             {$match: {fromId: shopId}},
+            {$sort: {createdAt: -1}},
+            {$skip: (currentPage -1) * perPage},
+            {$limit: perPage},
             {$lookup: {
                 from:'shops',
                 localField: 'fromId',
@@ -42,9 +45,6 @@ exports.getShopTransfer = (req, res) => {
                 to: '$to.name',
                 user: '$user.name'
             }},
-            {$sort: {createdAt: -1}},
-            {$skip: (currentPage -1) * perPage},
-            {$limit: perPage},
         ])
     })
     .then(result => {
@@ -72,6 +72,9 @@ exports.getAllTransfer = (req, res) => {
     .then(count => {
         totalItems = count
         return TransferModle.aggregate([
+            {$sort: {createdAt: -1}},
+            {$skip: (currentPage -1) * perPage},
+            {$limit: perPage},
             {$lookup: {
                 from:'shops',
                 localField: 'fromId',
@@ -97,10 +100,7 @@ exports.getAllTransfer = (req, res) => {
                 from: '$from.name',
                 to: '$to.name',
                 user: '$user.name'
-            }},
-            {$sort: {createdAt: -1}},
-            {$skip: (currentPage -1) * perPage},
-            {$limit: perPage},
+            }}
         ])
     })
     .then(result => {
