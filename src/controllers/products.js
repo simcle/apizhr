@@ -124,6 +124,7 @@ exports.getAllProducts = (req, res) => {
         totalItems = count
         return Products.aggregate([
             {$match: {$and: [{sku: {$exists: true}}, {$or: [{name: {$regex: '.*'+search+'.*', $options: 'i'}}, {sku: {$regex: '.*'+search+'.*', $options: 'i'}}]}, brandIds, categoryIds, status]}},
+            {$sort: {stock: -1}},
             {$lookup: {
                 from: 'categories',
                 localField: 'categoryId',
@@ -160,7 +161,6 @@ exports.getAllProducts = (req, res) => {
                 isActive: 1,
                 createdAt: 1
             }},
-            {$sort: {stock: -1}},
             {$skip: (currentPage -1) * perPage},
             {$limit: perPage},
         ])
