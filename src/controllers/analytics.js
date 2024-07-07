@@ -578,24 +578,26 @@ exports.taskStockOpname = (req, res) => {
         }
     })
     .then(queryId => {
+        const date = new Date()
+        day = date.getDate() - 89
+        date.setDate(day)
+        date.setHours(0, 0, 0, 0)
+        
         if(queryId) {
             ProductModel.aggregate([
-                {$match: query},
+                {$match: queryId},
+                {$sort: {sku: 1}},
                 {$lookup: {
                     from: 'sales',
                     let: {'itemId': '$_id'},
                     pipeline: [
-                        // {$match: {
-                        //     $expr: {$gte: ['$createdAt', date]}
-                        // }},
+                        {$match: {
+                            $expr: {$gte: ['$createdAt', date]}
+                        }},
+                        {$match: {shopId: shopId}},
                         {$unwind: '$items'},
                         {$match: {
-                            $expr: {
-                                $and: [
-                                    {$eq: ['$items.productId', '$$itemId']},
-                                    {$eq: ['$shopId', shopId]}
-                                ]
-                            }
+                            $expr: {$eq: ['$items.productId', '$$itemId']}
                         }},
                         {$group: {
                             _id: '$items.productId',
@@ -628,8 +630,7 @@ exports.taskStockOpname = (req, res) => {
                 {$match: {'inventory.shopId': shopId}},
                 {$addFields: {
                     inventory: '$inventory.qty'
-                }},
-                {$sort: {sku: 1}}
+                }}
             ])
             .then(result => {
                 res.status(200).json(result)
