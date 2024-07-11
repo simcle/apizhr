@@ -5,7 +5,7 @@ exports.getPayroll = (req, res) => {
     day.setDate(day.getDate() - 6)
     day.setHours(0,0,0,0)
     AttlogsModel.aggregate([
-        {$match: {$and:[{scanDate: {$gte: day}}, {scanIn: {$ne: null}}]}},
+        {$match:{scanDate: {$gte: day}}},
         {$lookup: {
             from: 'users',
             foreignField: 'pin',
@@ -20,7 +20,8 @@ exports.getPayroll = (req, res) => {
             posisi: '$user.employmentData.posisiPekerjaan',
             status: '$user.employmentData.statusPekerjaan',
             gaji: '$user.payroll.gajiPokok',
-            bonus: '$user.payroll.bonusSales'
+            bonus: '$user.payroll.bonusSales',
+            lembur: 0
         }},
         {$group: {
             _id: '$userPin',
@@ -30,7 +31,8 @@ exports.getPayroll = (req, res) => {
             posisi: {$first: '$posisi'},
             status: {$first: '$status'},
             bonus: {$first: '$bonus'},
-            attendences: {$push: '$scanIn'}
+            lembur: {$first: '$lembur'},
+            attendences: {$push: {ts: '$scanDate', in: '$scanIn', out: '$scanOut', desc: '$information'}}
         }},
         {$sort: {_id: 1}}
     ])
