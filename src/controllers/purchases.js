@@ -146,9 +146,11 @@ exports.insertItem = (req, res) => {
     const purchaseId = req.params.purchaseId
     const item = req.body
     PurchaseModel.findById(purchaseId)
-    .then(result => {
-       result.items.push(item)
-       return result.save()
+    .then(async (result) => {
+        const purchaseNo = result.purchaseNo
+        result.items.push(item)
+        await ProductModel.updateOne({_id: item.productId}, {flow: 'Purchase', sourceFlow: purchaseNo})
+        return result.save()
     })
     .then(result => {
         res.status(200).json(result)
@@ -157,10 +159,12 @@ exports.insertItem = (req, res) => {
 
 exports.deleteItem = (req, res) => {
     const purchaseId = req.params.purchaseId
-    const id = req.body._id
+    
+    const item = req.body
     PurchaseModel.findById(purchaseId)
-    .then(result => {
-        result.items.pull(id)
+    .then(async (result) => {
+        result.items.pull(item._id)
+        await ProductModel.updateOne({_id: item.productId}, {flow: '', sourceFlow: ''})
         return result.save()
     })
     .then(result => {
