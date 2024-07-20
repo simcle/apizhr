@@ -13,6 +13,7 @@ exports.getPayroll = (req, res) => {
             as: 'user'
         }},
         {$unwind: '$user'},
+        {$match: {'user.isActive': true}},
         {$addFields: {
             pin: '$user.pin',
             nik: '$user.employmentData.barcode',
