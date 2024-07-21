@@ -24,6 +24,7 @@ exports.getPayroll = (req, res) => {
             bonus: '$user.payroll.bonusSales',
             lembur: 0
         }},
+        {$sort: {scanDate: 1}},
         {$group: {
             _id: '$userPin',
             name: {$first: '$user'},
