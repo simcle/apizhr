@@ -23,7 +23,7 @@ exports.getOutlet = (req, res) => {
 
 exports.getReport = (req, res) => {
     const date = new Date();
-    let day = date.getDate() - 89
+    let day = date.getDate() - 6
     date.setDate(day)
     date.setHours(0, 0, 0, 0)
     const shopId = mongoose.Types.ObjectId(req.query.shopId);
