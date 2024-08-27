@@ -9,13 +9,31 @@ const MitraHistoryModel = require('../models/mitraHistory');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const MitraSO = require('../models/mitraSo')
 
 exports.getSoSku = (req, res) => {
     const sku = req.query.sku
-    ProductModel.findOne({sku: sku})
+    ProductModel.aggregate([
+        {$match: {sku: sku}},
+        {$lookup: {
+            from: 'mitrainventories',
+            localField: '_id',
+            foreignField: 'productId',
+            as: 'inventory'
+        }},
+        {$unwind: {
+            path: '$inventory',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$addFields: {
+            unitPrice: '$inventory.unitPrice',
+            qty: '$inventory.qty'
+        }}
+    ])
     .then(result => {
-        res.status(200).json(result)
+        res.status(200).json(result[0])
     })
+   
 }
 
 exports.insertSoInventory = (req, res) => {
@@ -25,16 +43,14 @@ exports.insertSoInventory = (req, res) => {
     const name = req.body.name
     const unitPrice = req.body.unitPrice
     const qty = req.body.qty
+    const onHand = req.body.onHand
     MitraInventoryModel.findOne({$and: [{productId: productId}, {mitraId: mitraId}]})
     .then(item => {
         if(item) {
             item.unitPrice = unitPrice
             item.name = item.name
-            item.qty = item.qty + qty
-            item.save()
-            .then(() => {
-                res.status(200).json('OK')
-            })
+            item.qty = qty
+            return item.save()
         } else {
             const inv = new MitraInventoryModel({
                 mitraId: mitraId,
@@ -44,11 +60,23 @@ exports.insertSoInventory = (req, res) => {
                 unitPrice: unitPrice,
                 qty: qty
             })
-            inv.save()
-            .then(() => {
-                res.status(200).json('OK')
-            })
+            return inv.save()
+            
         }
+    })
+    .then(() => {
+        const mitraso = new MitraSO({
+            mintraId: mitraId,
+            productId: productId,
+            sku: sku,
+            name: name,
+            onHand: onHand,
+            qty: qty
+        })
+        return mitraso.save()
+    })
+    .then(() => {
+        res.status(200).json('OK')
     })
 }
 
