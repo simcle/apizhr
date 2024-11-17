@@ -32,11 +32,12 @@ exports.getPurchases = (req, res) => {
     let totalItems;
     let query;
     if(search) {
-        query = {$or: [{purchaseNo: search}, {supplier: {$regex: '.*'+search+'.*', $options: 'i'}}, {remarks: {$regex: '.*'+search+'.*', $options: 'i'}}]}
+        query = {$or: [{purchaseNo: search}, {'supplier.name': {$regex: '.*'+search+'.*', $options: 'i'}}, {remarks: {$regex: '.*'+search+'.*', $options: 'i'}}]}
     } else {
-        query = {status: status}
+        query = {}
     }
     PurchaseModel.aggregate([
+        {$match: {status: status}},
         {$sort: {createdAt: -1}},
         {$lookup: {
             from: 'suppliers',
