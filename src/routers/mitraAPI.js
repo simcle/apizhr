@@ -15,5 +15,6 @@ router.get('/transfer', mitraController.getTransfer);
 
 router.get('/so/sku', mitraController.getSoSku);
 router.post('/so', mitraController.insertSoInventory);
+router.get('/so/download', mitraController.getSo)
 
 module.exports = router

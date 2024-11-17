@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const supplier = require('./supplier');
 const Schema = mongoose.Schema;
 
 const PurchaseSchema = new Schema({
@@ -23,5 +24,5 @@ const PurchaseSchema = new Schema({
 }, {
     timestamps: true
 })
-
+PurchaseSchema.index({createdAt: -1})
 module.exports = mongoose.model('Purchases', PurchaseSchema);

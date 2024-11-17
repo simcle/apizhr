@@ -7,9 +7,38 @@ const receiptModel =require('../models/receipts');
 const productModel = require('../models/products')
 const purchaseModel = require('../models/purchases')
 const excel = require('exceljs');
+const mongoose = require('mongoose')
 
-const starDate = new Date('2024-01-01')
-const endDate = new Date('2024-07-1')
+const starDate = new Date('2024-10-01')
+const endDate = new Date('2024-11-01')
+
+exports.getSalesBySupplier = (req, res) => {
+    let day;
+    const date = new Date();
+    day = date.getDate() - 30
+    date.setDate(day)
+    date.setHours(0, 0, 0, 0)
+    const supplierId = mongoose.Types.ObjectId('64992c314a5ea7413b1e0821')
+    receiptModel.aggregate([
+        {$match: {$and: [{createdAt: {$gte: date}}, {supplierId: supplierId}]}},
+        {$unwind: '$items'},
+        {$group: {
+            _id: '$items.productId',
+            sku: {$first: '$items.sku'},
+            name: {$first: '$items.name'},
+            qty: {$sum: '$items.qty'}
+        }},
+        {$lookup: {
+            from: 'sales',
+            pipeline: [
+                {$match: {}}
+            ]
+        }}
+    ])
+    .then(result => {
+        res.status(200).json(result)
+    })
+}
 
 exports.getCategory = (req, res) => {
     salesModel.aggregate([
@@ -210,9 +239,9 @@ exports.getModelPerMonth = (req, res) => {
 
 exports.getModelVarian = (req, res) => {
     salesModel.aggregate([
-        {$match: {createdAt: {$gte: new Date('2024-01-01'), $lt: new Date('2024-07-1')}}},
+        {$match: {createdAt: {$gte: starDate, $lt: endDate}}},
         {$unwind: '$items'},
-        {$unionWith: {coll: 'onlines', pipeline: [{$match: {createdAt: {$gte: new Date('2024-01-01'), $lt: new Date('2024-07-1')}}}, {$unwind: '$items'}]}},
+        {$unionWith: {coll: 'onlines', pipeline: [{$match: {createdAt: {$gte: starDate, $lt: endDate}}}, {$unwind: '$items'}]}},
         {$group: {
             _id: '$items.productId',
             count: {$sum: '$items.qty'},
@@ -1085,3 +1114,4 @@ exports.getProductNotSales = (req, res) => {
         res.status(200).end();
     })
 }
+

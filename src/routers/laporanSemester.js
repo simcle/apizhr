@@ -16,5 +16,6 @@ router.get('/employee', laporanSemesterController.getEmployee)
 router.get('/barang', laporanSemesterController.getBarangMasuk)
 router.get('/permintaan', laporanSemesterController.getPermintaan)
 router.get('/belum-terjual', laporanSemesterController.getProductNotSales);
+router.get('/sales', laporanSemesterController.getSalesBySupplier)
 
 module.exports = router

@@ -10,6 +10,54 @@ const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
 const MitraSO = require('../models/mitraSo')
+const excel = require('exceljs')
+
+exports.getSo = (req, res) => {
+    MitraSO.aggregate([
+        {
+            $lookup: {
+                from: 'mitrainventories',
+                localField: 'sku',
+                foreignField: 'sku',
+                as: 'harga'
+            }
+        },
+        {$unwind: {
+            path: '$harga',
+            preserveNullAndEmptyArrays: true
+        }},
+        {
+            $addFields: {
+                unitPrice: '$harga.unitPrice',
+                diff: {$subtract: ['$qty', '$onHand']}
+            }
+        }
+    ])
+    .then( async (result) => {
+        let workbook = new excel.Workbook()
+        let worksheet = workbook.addWorksheet('Laporan')
+        worksheet.columns = [
+            {key: 'sku', width: 10},
+            {key: 'name', width: 45},
+            {key: 'unitPrice', width: 10},
+            {key: 'onHand', width: 5},
+            {key: 'qty', width: 5},
+            {key: 'diff', width: 5}
+        ]
+        worksheet.getRow(1).values = ['SKU', 'NAMA', 'HARGA', 'STOK AWAL', 'STOK NYATA', 'PERBEDAAN']
+        worksheet.addRows(result)
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            "attachment; filename=" + "tutorials.xlsx"
+        );
+        await workbook.xlsx.write(res);
+        res.status(200).end();
+    })
+}
 
 exports.getSoSku = (req, res) => {
     const sku = req.query.sku

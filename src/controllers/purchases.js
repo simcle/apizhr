@@ -6,6 +6,7 @@ const ReceiptModel = require('../models/receipts');
 const mongoose = require('mongoose')
 const excel = require('exceljs');
 const moment = require('moment');
+const supplier = require('../models/supplier');
 
 exports.getSuppliers = (req, res) => {
     const search = req.query.search
@@ -31,11 +32,26 @@ exports.getPurchases = (req, res) => {
     let totalItems;
     let query;
     if(search) {
-        query = {$and: [{status: status}, {$or: [{purchaseNo: search}, {supplier: {$regex: '.*'+search+'.*', $options: 'i'}}, {remarks: {$regex: '.*'+search+'.*', $options: 'i'}}]}]}
+        query = {$or: [{purchaseNo: search}, {supplier: {$regex: '.*'+search+'.*', $options: 'i'}}, {remarks: {$regex: '.*'+search+'.*', $options: 'i'}}]}
     } else {
         query = {status: status}
     }
     PurchaseModel.aggregate([
+        {$sort: {createdAt: -1}},
+        {$lookup: {
+            from: 'suppliers',
+            foreignField: '_id',
+            localField: 'supplierId',
+            as: 'supplier'
+        }},
+        {$match: query},
+        {$skip: (currentPage -1) * perPage},
+        {$limit: perPage},
+        {$unwind: '$supplier'},
+        {$addFields: {
+            supplier: '$supplier.name',
+            total: {$sum: '$items.qty'}
+        }},
         {$project: {
             _id: 1,
             supplierId: 1,
@@ -44,23 +60,10 @@ exports.getPurchases = (req, res) => {
             status: 1, 
             createdAt: 1,
             remarks: 1,
-            items: 1
+            items: 1,
+            supplier: 1,
+            total: 1
         }},
-        {$lookup: {
-            from: 'suppliers',
-            foreignField: '_id',
-            localField: 'supplierId',
-            as: 'supplier'
-        }},
-        {$unwind: '$supplier'},
-        {$addFields: {
-            supplier: '$supplier.name',
-            total: {$sum: '$items.qty'}
-        }},
-        {$match: query},
-        {$sort: {createdAt: -1}},
-        {$skip: (currentPage -1) * perPage},
-        {$limit: perPage},
     ])
     .then(result => {
         const last_page = Math.ceil(totalItems / perPage)
