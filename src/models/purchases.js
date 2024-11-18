@@ -24,5 +24,5 @@ const PurchaseSchema = new Schema({
 }, {
     timestamps: true
 })
-PurchaseSchema.index({createdAt: -1})
+PurchaseSchema.index({status: 1, createdAt: -1})
 module.exports = mongoose.model('Purchases', PurchaseSchema);

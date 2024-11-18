@@ -10,7 +10,7 @@ const excel = require('exceljs');
 const mongoose = require('mongoose')
 
 const starDate = new Date('2024-10-01')
-const endDate = new Date('2024-11-01')
+const endDate = new Date('2024-10-30')
 
 exports.getSalesBySupplier = (req, res) => {
     let day;
@@ -27,12 +27,6 @@ exports.getSalesBySupplier = (req, res) => {
             sku: {$first: '$items.sku'},
             name: {$first: '$items.name'},
             qty: {$sum: '$items.qty'}
-        }},
-        {$lookup: {
-            from: 'sales',
-            pipeline: [
-                {$match: {}}
-            ]
         }}
     ])
     .then(result => {
