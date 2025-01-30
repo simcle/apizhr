@@ -130,43 +130,97 @@ exports.getStockBarangMobile = (req, res) => {
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     ProductModel.aggregate([
-        {$match: {$text: {$search: queryString}}},
-        {$project: {
+        { $match: { $text: { $search: queryString } } },
+        { $project: { 
             _id: 1,
             sku: 1,
             name: 1,
-            score: {$meta: 'textScore'}
+            score: { $meta: 'textScore' } 
         }},
-        {$lookup: {
-            from: 'inventories',
-            localField: '_id',
-            foreignField: 'productId',
-            as: 'inventory'
+        
+        // Lookup Inventory dari 'inventories'
+        { $lookup: { 
+            from: 'inventories', 
+            localField: '_id', 
+            foreignField: 'productId', 
+            as: 'inventory' 
         }},
         {$unwind: '$inventory'},
-        {$lookup: {
-            from: 'shops',
-            localField: 'inventory.shopId',
-            foreignField: '_id',
-            as: 'inventory.shop'
+        // Lookup Shop untuk setiap inventory
+        { $lookup: { 
+            from: 'shops', 
+            localField: 'inventory.shopId', 
+            foreignField: '_id', 
+            as: 'inventory.shop' 
         }},
         {$unwind: '$inventory.shop'},
         {$addFields: {
-            'inventory.shop':'$inventory.shop.name'
+            'inventory.shop': '$inventory.shop.name',
         }},
-        {$sort: {'inventory.qty': -1}},
         {$group: {
             _id: '$_id',
-            sku: {$first: '$sku'},
-            name: {$first: '$name'},
-            shop: {$push: '$inventory'},
-            score: {$first: '$score'}
+            sku: { $first: '$sku' },
+            name: { $first: '$name' },
+            inventory: { $push: '$inventory' },
         }},
-        {$sort: {score: -1}},
-        {$limit: 20},
+        // Lookup Mitra Inventory dari 'mitrainventories'
+        { $lookup: { 
+            from: 'mitrainventories', 
+            localField: '_id', 
+            foreignField: 'productId', 
+            as: 'mitrainventory' 
+        }},
+        {$unwind: '$mitrainventory'},
+        // Lookup Mitra dari 'mitras'
+        { $lookup: { 
+            from: 'mitras', 
+            localField: 'mitrainventory.mitraId', 
+            foreignField: '_id', 
+            as: 'mitrainventory.shop' 
+        }},
+        {$unwind: '$mitrainventory.shop'},
+        {$addFields: {
+            'mitrainventory.shop': '$mitrainventory.shop.name'
+        }},
+        {$group: {
+            _id: '$_id',
+            sku: { $first: '$sku' },
+            name: { $first: '$name' },
+            inventory: { $first: '$inventory' },
+            mitrainventory: { $push: '$mitrainventory' },
+        }},
+        // Gabungkan inventory dan mitrainventory ke dalam satu array 'shop'
+        {
+            $addFields: {
+                shop: { 
+                    $concatArrays: [
+                        { $ifNull: ["$inventory", []] }, 
+                        { $ifNull: ["$mitrainventory", []] }
+                    ] 
+                }
+            }
+        },
+        {$unwind: '$shop'},
+        // Sort berdasarkan inventory qty tertinggi
+        { $sort: { 'shop.qty': -1 } },
+    
+        // Grouping berdasarkan _id agar data tidak duplikat
+        { $group: {
+            _id: '$_id',
+            sku: { $first: '$sku' },
+            name: { $first: '$name' },
+            shop: { $push: '$shop' },
+            score: { $first: '$score' }
+        }},
+    
+        { $sort: { score: -1 }},
+        { $limit: 20 }
     ])
     .then(result => {
-        res.status(200).json(result)
+        res.status(200).json(result);
     })
+    .catch(error => {
+        res.status(500).json({ error: error.message });
+    });
 
 }

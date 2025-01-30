@@ -667,7 +667,7 @@ exports.getOutOfStock = (req, res) => {
 exports.getSummary = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.params.productId)
     const date = new Date();
-    let day = date.getDate() - 89
+    let day = date.getDate() - 29
     date.setDate(day)
     date.setHours(0, 0, 0, 0)
     SalesModel.aggregate([

@@ -56,10 +56,15 @@ const purchaseRoutes = require('./src/routers/purchases');
 const reportRouter = require('./src/routers/report');
 const setorRouter = require('./src/routers/setor');
 
+
+
 const laporanBulanan = require('./src/routers/laporanBulanan')
 const laporanSemester = require('./src/routers/laporanSemester')
+const metrixRouter = require('./src/metrix/router')
+
 app.use('/semester', laporanSemester);
 app.use('/bulanan', laporanBulanan)
+app.use('/metrix', metrixRouter)
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);

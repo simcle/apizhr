@@ -2,6 +2,7 @@ const SupplierModel = require('../models/supplier');
 const ProductModel = require('../models/products');
 const PurchaseModel = require('../models/purchases');
 const ReceiptModel = require('../models/receipts');
+const SalesModel = require('../models/sales')
 
 const mongoose = require('mongoose')
 const excel = require('exceljs');
