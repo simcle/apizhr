@@ -145,7 +145,10 @@ exports.getStockBarangMobile = (req, res) => {
             foreignField: 'productId', 
             as: 'inventory' 
         }},
-        {$unwind: '$inventory'},
+        {$unwind: {
+            path: '$inventory',
+            preserveNullAndEmptyArrays: true
+        }},
         // Lookup Shop untuk setiap inventory
         { $lookup: { 
             from: 'shops', 
@@ -153,7 +156,10 @@ exports.getStockBarangMobile = (req, res) => {
             foreignField: '_id', 
             as: 'inventory.shop' 
         }},
-        {$unwind: '$inventory.shop'},
+        {$unwind: {
+            path: '$inventory.shop',
+            preserveNullAndEmptyArrays: true
+        }},
         {$addFields: {
             'inventory.shop': '$inventory.shop.name',
         }},
@@ -170,7 +176,10 @@ exports.getStockBarangMobile = (req, res) => {
             foreignField: 'productId', 
             as: 'mitrainventory' 
         }},
-        {$unwind: '$mitrainventory'},
+        {$unwind: {
+            path: '$mitrainventory',
+            preserveNullAndEmptyArrays: true
+        }},
         // Lookup Mitra dari 'mitras'
         { $lookup: { 
             from: 'mitras', 
@@ -178,7 +187,10 @@ exports.getStockBarangMobile = (req, res) => {
             foreignField: '_id', 
             as: 'mitrainventory.shop' 
         }},
-        {$unwind: '$mitrainventory.shop'},
+        {$unwind: {
+            path: '$mitrainventory.shop',
+            preserveNullAndEmptyArrays: true
+        }},
         {$addFields: {
             'mitrainventory.shop': '$mitrainventory.shop.name'
         }},
