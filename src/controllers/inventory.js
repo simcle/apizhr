@@ -200,6 +200,7 @@ exports.getStockBarangMobile = (req, res) => {
             name: { $first: '$name' },
             inventory: { $first: '$inventory' },
             mitrainventory: { $push: '$mitrainventory' },
+            score: { $first: '$score'}
         }},
         // Gabungkan inventory dan mitrainventory ke dalam satu array 'shop'
         {
@@ -213,7 +214,9 @@ exports.getStockBarangMobile = (req, res) => {
             }
         },
         {$unwind: '$shop'},
+        {$match: {shop: {$ne: {}}}},
         // Sort berdasarkan inventory qty tertinggi
+        
         { $sort: { 'shop.qty': -1 } },
     
         // Grouping berdasarkan _id agar data tidak duplikat
@@ -224,7 +227,6 @@ exports.getStockBarangMobile = (req, res) => {
             shop: { $push: '$shop' },
             score: { $first: '$score' }
         }},
-    
         { $sort: { score: -1 }},
         { $limit: 20 }
     ])
