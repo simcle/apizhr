@@ -168,6 +168,7 @@ exports.getStockBarangMobile = (req, res) => {
             sku: { $first: '$sku' },
             name: { $first: '$name' },
             inventory: { $push: '$inventory' },
+            score: {$first: '$score'}
         }},
         // Lookup Mitra Inventory dari 'mitrainventories'
         { $lookup: { 
@@ -215,6 +216,7 @@ exports.getStockBarangMobile = (req, res) => {
         },
         {$unwind: '$shop'},
         {$match: {shop: {$ne: {}}}},
+
         // Sort berdasarkan inventory qty tertinggi
         
         { $sort: { 'shop.qty': -1 } },
