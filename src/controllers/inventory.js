@@ -127,10 +127,12 @@ exports.getStockBarangOnline = (req, res) => {
 }
 
 exports.getStockBarangMobile = (req, res) => {
+    
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     ProductModel.aggregate([
         { $match: { $text: { $search: queryString } } },
+        {$limit: 20},
         { $project: { 
             _id: 1,
             sku: 1,
