@@ -2,9 +2,8 @@ const PengeluaranModel = require('../models/pengeluaran');
 
 
 exports.getPengeluaran = (req, res) => {
-    console.log('hallo')
     const shopId = req.user.shopId
-    const date = new Date('2025-04-01');
+    const date = new Date();
     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     console.log(today, date)
 

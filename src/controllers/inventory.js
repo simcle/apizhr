@@ -126,11 +126,11 @@ exports.getStockBarangOnline = (req, res) => {
     })
 }
 
-exports.getStockBarangMobile = (req, res) => {
+exports.getStockBarangMobile = async (req, res) => {
     
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
-    ProductModel.aggregate([
+    await ProductModel.aggregate([
         { $match: { $text: { $search: queryString } } },
         // {$limit: 20},
         { $project: { 
