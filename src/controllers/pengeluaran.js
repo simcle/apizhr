@@ -3,11 +3,11 @@ const PengeluaranModel = require('../models/pengeluaran');
 
 exports.getPengeluaran = (req, res) => {
     const shopId = req.user.shopId
-    const date = new Date('2025-09-01');
+    const date = new Date();
     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     console.log(today, date, shopId)
 
-    PengeluaranModel.find({$and: [{shopId: shopId}, {createdAt: {$gte: date}}]}).sort({createdAt: -1})
+    PengeluaranModel.find({$and: [{shopId: shopId}, {createdAt: {$gte: today}}]}).sort({createdAt: -1})
     .then(result => {
         res.status(200).json(result)
     })
