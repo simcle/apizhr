@@ -3,7 +3,7 @@ const PengeluaranModel = require('../models/pengeluaran');
 
 exports.getPengeluaran = (req, res) => {
     const shopId = req.user.shopId
-    const date = new Date();
+    const date = new Date('2025-09-01');
     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     console.log(today, date, shopId)
 
