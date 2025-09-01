@@ -232,7 +232,7 @@ exports.getStockBarangMobile = (req, res) => {
             total: {$sum: '$shop.qty'},
             score: { $first: '$score' }
         }},
-        { $sort: {total: -1, score: -1 }},
+        { $sort: {score: -1, total: -1, }},
         // { $limit: 20 }
     ])
     .then(result => {
