@@ -5,7 +5,7 @@ exports.getPengeluaran = (req, res) => {
     const shopId = req.user.shopId
     const date = new Date();
     let today = new Date(date.getFullYear(), date.getMonth()+1, date.getDate())
-    console.log(today, date)
+    console.log(today, date, shopId)
 
     PengeluaranModel.find({$and: [{shopId: shopId}, {createdAt: {$gte: date}}]}).sort({createdAt: -1})
     .then(result => {
