@@ -132,7 +132,7 @@ exports.getStockBarangMobile = (req, res) => {
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
     ProductModel.aggregate([
         { $match: { $text: { $search: queryString } } },
-        {$limit: 20},
+        // {$limit: 20},
         { $project: { 
             _id: 1,
             sku: 1,
@@ -229,10 +229,11 @@ exports.getStockBarangMobile = (req, res) => {
             sku: { $first: '$sku' },
             name: { $first: '$name' },
             shop: { $push: '$shop' },
+            total: {$sum: '$shop.qty'},
             score: { $first: '$score' }
         }},
-        { $sort: { score: -1 }},
-        { $limit: 20 }
+        { $sort: {total: -1, score: -1 }},
+        // { $limit: 20 }
     ])
     .then(result => {
         res.status(200).json(result);

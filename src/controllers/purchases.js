@@ -248,30 +248,33 @@ exports.downloadPurchase = async (req, res) => {
 exports.getReport = (req, res) => {
     const date = moment().subtract(6, 'day').toDate()
     PurchaseModel.aggregate([
-        {$match: {createdAt: {$gte: date}}},
-        {$project: {
-            items: 1,
-            supplierId: 1
-        }},
-        {$unwind: '$items'},
-        {$group: {
+        { $match: { status: 'RFQ SENT' } },
+        { $unwind: '$items' },
+        { $group: {
             _id: '$supplierId',
-            purchase: {$sum: '$purchase'},
-            purchase: {$sum: '$items.qty'},
-        }},
-        {$lookup: {
+            invoices: { $addToSet: '$_id' },
+            createdAt: {$first: '$invoiceDate'},
+            totalQty: { $sum: '$items.qty' }
+        } },
+        { $addFields: {
+            invoiceCount: { $size: '$invoices' }
+        } },
+        { $lookup: {
             from: 'suppliers',
             foreignField: '_id',
             localField: '_id',
             as: 'supplier'
-        }},
-        {$unwind: '$supplier'},
-        {$addFields: {
+        } },
+        { $unwind: '$supplier' },
+        { $addFields: {
             supplier: '$supplier.name'
-        }},
+        } },
+        { $project: {
+            invoices: 0 // kalau tidak mau tampilkan array invoice
+        } },
+        {$sort: {totalQty: -1}}
     ])
     .then(result => {
-        console.log(result)
         res.status(200).json(result)
     })
 }

@@ -6,11 +6,13 @@ const employeeModel = require('../models/users');
 const receiptModel =require('../models/receipts');
 const productModel = require('../models/products')
 const purchaseModel = require('../models/purchases')
+const stockCard = require('../models/stockCard')
+
 const excel = require('exceljs');
 const mongoose = require('mongoose')
 
-const starDate = new Date('2024-10-01')
-const endDate = new Date('2024-10-30')
+const starDate = new Date('2024-07-01')
+const endDate = new Date('2025-03-30')
 
 exports.getSalesBySupplier = (req, res) => {
     let day;
@@ -1109,3 +1111,27 @@ exports.getProductNotSales = (req, res) => {
     })
 }
 
+exports.getStockBarang = async (req, res) => {
+    console.log('hallo')
+    const year = '2024'
+    const data = await stockCard.aggregate([
+        {$sort: {productId: 1, createdAt: -1}},
+        {$project: {
+            year: {$year: '$createdAt'},
+            balance: 1,
+            productId: 1
+        }},
+        {$match: {$and: [{'year': 2023}, {'balance': {$gte: 0}}]}},
+        {$group: {
+            _id: {productId: '$productId', year: '$year'},
+            balance: {$first: '$balance'}
+        }},
+        {$group: {
+            _id: '$year',
+            balance: {$sum: '$balance'}
+        }}
+    ])
+
+    console.log(data)
+
+}

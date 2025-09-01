@@ -8,8 +8,10 @@ const ProductModel = require('../models/products');
 const { default: mongoose } = require('mongoose');
 
 exports.getStats = (req, res)=> {
+    console.log('hallo')
     const date = new Date()
     const tahun= date.getFullYear()
+    console.log()
     const sales = SalesModel.aggregate([
         {$project: {
             tahun: {$year: '$createdAt'},
