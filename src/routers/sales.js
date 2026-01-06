@@ -14,4 +14,5 @@ router.get('/report/best', salesController.getBestSales);
 router.get('/report/download', salesController.getReport);
 router.get('/report/outlet', salesController.getOutlet)
 router.get('/report/statistics', salesController.getChart)
+router.get('/report/filter', salesController.getSalesFilter)
 module.exports = router

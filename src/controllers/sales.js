@@ -343,6 +343,21 @@ exports.getDetailSales = (req, res) => {
     })
 }
 
+exports.getSalesFilter = async (req, res) => {
+    const input = "28/11/2025"; // DD/MM/YYYY
+
+    const [day, month, year] = input.split("/");
+
+    const start = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+    const end   = new Date(`${year}-${month}-${day}T23:59:59+07:00`);
+    const shopId = '647577faa59620ad434d4843'
+    const sales = await SalesModel.find({
+        shopId: shopId,
+        createdAt: { $gte: start, $lte: end }
+    });
+    res.status(200).json(sales)
+}
+
 exports.insertDraft = async (req, res) => {
     const shopId = req.user.shopId
     const draftId = req.body.draftId

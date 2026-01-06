@@ -62,9 +62,15 @@ const laporanBulanan = require('./src/routers/laporanBulanan')
 const laporanSemester = require('./src/routers/laporanSemester')
 const metrixRouter = require('./src/metrix/router')
 
+const inventoryIntelRouter = require('./src/routers/inventoryIntel');
+
+app.use('/api/inventory-intel', inventoryIntelRouter)
+
 app.use('/semester', laporanSemester);
 app.use('/bulanan', laporanBulanan)
 app.use('/metrix', metrixRouter)
+
+
 
 app.use('/webhook', webhookRouters);
 app.use('/auth', userRoutes);

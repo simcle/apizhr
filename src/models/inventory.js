@@ -8,5 +8,5 @@ const InventorySchema = new Schema({
 }, {
     timestamps: true
 })
-
+InventorySchema.index({ shopId: 1, productId: 1 }, { unique: true });
 module.exports = mongoose.model('Inventory', InventorySchema);
