@@ -5,6 +5,7 @@ const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
 const ProductModel = require('../models/products');
+const PurchaseModel = require('../models/purchases');
 
 exports.getAllReceipts = (req, res) => {
     const search = req.query.search
@@ -149,7 +150,17 @@ exports.insertReceipts = async (req, res) => {
         const items = result.items
         for(let i = 0; i < items.length; i ++) {
             const item = items[i]
-            await ProductModel.updateOne({_id: item.productId}, {purchase: item.purchase, flow: 'Receipts', sourceFlow: receiptsNo});
+            const purchase = await PurchaseModel.findOne({
+                status: {$in: ['RFQ SENT', 'DONE']},
+                'items.productId': item.productId
+            })
+            .sort({createdAt: -1})
+            .lean();
+            let leadTime = 0;
+            if(purchase) {
+                leadTime = Math.ceil((result.createdAt - purchase.createdAt) / (1000 * 60 * 60 * 24));
+            }
+            await ProductModel.updateOne({_id: item.productId}, {purchase: item.purchase, flow: 'Receipts', sourceFlow: receiptsNo, leadTime: leadTime});
             const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
             if(inventory) {
                 inventory.qty = inventory.qty + item.qty

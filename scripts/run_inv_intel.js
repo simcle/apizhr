@@ -29,3 +29,5 @@ main().catch(err => {
   console.error(err);
   process.exit(1);
 });
+
+// WAREHOUSE_SHOP_ID="647aa84733581aaca9c7725b" MONGODB_URI="mongodb://admin:pwlan123@82.29.162.105:27017/zhrleather?authSource=admin" node scripts/run_inv_intel.js 2026-01-05

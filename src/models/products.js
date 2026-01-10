@@ -18,6 +18,8 @@ const ProductSchema = new Schema({
     attributes: {type: Array},
     description: {type: String},
     stock: {type: Number, default: 0},
+    leadTime: {type: Number, default: 0},
+    safetyDays: {type: Number, default: 0},
     weight: {type: Object},
     flow: {type: String},
     sourceFlow: {type: String, default: null},

@@ -27,17 +27,26 @@ function dateMinusDays(dateStr, days) {
 function calcStatus({ stockOnHand, ads, daysOfCover, rop }) {
   const reasons = [];
 
-  if (stockOnHand === 0 && ads > 0.2) {
+  // 1. Tidak ada demand → bukan isu stok
+  if (ads < EPS) {
+    reasons.push('NoDemand');
+    return { status: 'AMAN', reasons };
+  }
+
+  // 2. Stockout (termasuk minus)
+  if (stockOnHand <= 0) {
     reasons.push('Stockout & Demand>0');
     return { status: 'AWAS', reasons };
   }
 
-  if (daysOfCover <= DOC_SIAGA_DAYS && ads > 0.2) {
+  // 3. Hampir habis
+  if (daysOfCover <= DOC_SIAGA_DAYS) {
     reasons.push(`DOC<=${DOC_SIAGA_DAYS}`);
     return { status: 'SIAGA', reasons };
   }
 
-  if ((daysOfCover <= DOC_WASPADA_DAYS && ads > 0.2) || stockOnHand <= rop) {
+  // 4. Mulai risk
+  if (daysOfCover <= DOC_WASPADA_DAYS || stockOnHand <= rop) {
     if (daysOfCover <= DOC_WASPADA_DAYS) reasons.push(`DOC<=${DOC_WASPADA_DAYS}`);
     if (stockOnHand <= rop) reasons.push('Stock<=ROP');
     return { status: 'WASPADA', reasons };

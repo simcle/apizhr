@@ -111,6 +111,9 @@ app.use('/analytics', analyticRoutes);
 app.use('/purchases', purchaseRoutes);
 app.use('/report', reportRouter);
 app.use('/setor', authenticateToken, setorRouter)
+
+
+
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
 mongoose.connect(process.env.DATA_BASE, {

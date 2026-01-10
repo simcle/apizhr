@@ -19,7 +19,7 @@ exports.getProductBySku = (req, res) => {
     const shopId = mongoose.Types.ObjectId(req.user.shopId)
     const sku = req.query.sku
     Products.aggregate([
-        {$match: {$and: [{sku: {$exists: true}}, {sku: sku}]}},
+        {$match: {$and: [{sku: {$exists: true}}, {sku: sku}, {isActive: true}]}},
         {$lookup: {
             from: 'inventories',
             localField: '_id',
