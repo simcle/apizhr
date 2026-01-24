@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Sales = require('../models/sales'); // model kamu
+const Online = require('../models/online')
 const SalesDaily = require('../models/SalesDaily');
 
 function toJakartaRange(dateStr) {
@@ -14,7 +15,7 @@ function toJakartaRange(dateStr) {
 async function buildSalesDailyForDate(dateStr) {
   const { start, end } = toJakartaRange(dateStr);
 
-  const pipeline = [
+  const offlinePipeline = [
     { $match: { createdAt: { $gte: start, $lt: end } } },
     { $unwind: '$items' },
     {
@@ -26,7 +27,7 @@ async function buildSalesDailyForDate(dateStr) {
           sku: '$items.sku',
         },
         qtySold: { $sum: '$items.qty' },
-        trxCount: { $sum: 1 },
+        trxCount: { $addToSet: '$_id' },
       }
     },
     {
@@ -37,18 +38,49 @@ async function buildSalesDailyForDate(dateStr) {
         productId: '$_id.productId',
         sku: '$_id.sku',
         qtySold: 1,
-        trxCount: 1,
+        trxCount: { $size: '$trxCount' }
       }
-    }
+    },
   ];
 
-  const rows = await Sales.aggregate(pipeline).allowDiskUse(true);
+  const onlinePipeline = [
+    { $match: { createdAt: { $gte: start, $lt: end } } },
+    { $unwind: '$items' },
+    {
+      $group: {
+        _id: {
+          date: dateStr,
+          shopId: mongoose.Types.ObjectId('6475d52daa375fa751092f5d'),
+          productId: '$items.productId',
+          sku: '$items.sku',
+        },
+        qtySold: { $sum: '$items.qty' },
+        trxCount: { $addToSet: '$_id' },
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        date: '$_id.date',
+        shopId: '$_id.shopId',
+        productId: '$_id.productId',
+        sku: '$_id.sku',
+        qtySold: 1,
+        trxCount: { $size: '$trxCount' }
+      }
+    },
+  ]
+
+  const offlineRows = await Sales.aggregate(offlinePipeline).allowDiskUse(true)
+  const onlineRows = await Online.aggregate(onlinePipeline).allowDiskUse(true)
+
+  const rows = [...offlineRows, ...onlineRows]
 
   if (!rows.length) return { insertedOrUpdated: 0 };
 
   const ops = rows.map(r => ({
     updateOne: {
-      filter: { date: r.date, shopId: r.shopId, sku: r.sku },
+      filter: { date: r.date, shopId: r.shopId, productId: r.productId },
       update: { $set: r },
       upsert: true
     }
