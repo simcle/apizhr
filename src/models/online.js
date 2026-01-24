@@ -36,5 +36,11 @@ const OnlineSchema = new Schema({
     timestamps: true
 });
 
+OnlineSchema.index({ createdAt: -1 })
+OnlineSchema.index({ userId: 1, createdAt: -1 })
+OnlineSchema.index({ isPrinted: 1 })
+OnlineSchema.index({ resi: 1 })
+OnlineSchema.index({ shippingId: 1 })
+OnlineSchema.index({ customerName: 'text' })
 
 module.exports = mongoose.model('Online', OnlineSchema);
