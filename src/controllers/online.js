@@ -8,39 +8,6 @@ const stockCard = require('../modules/stockCard');
 const MarketplaceModel = require('../models/marketplaces');
 const excel = require('exceljs');
 
-function buildMatch({ search, filter, filterShipping, userId, today }) {
-    const match = {}
-
-    if (search) {
-        match.customerName = { $regex: search, $options: 'i' }
-    }
-
-    if (filterShipping) {
-        match.shippingId = mongoose.Types.ObjectId(filterShipping)
-    }
-
-    switch (filter) {
-        case 'Saya':
-            match.userId = userId
-            match.createdAt = { $gte: today }
-            break
-
-        case 'Hari ini':
-            match.createdAt = { $gte: today }
-            break
-
-        case 'Belum diprint':
-            match.isPrinted = false
-            break
-
-        case 'Siap dikirim':
-            match.isPrinted = true
-            match.resi = null
-            break
-    }
-
-    return match
-}
 
 exports.getDashboard = (req, res) => {
     const date = new Date();
@@ -120,277 +87,173 @@ exports.getDashboard = (req, res) => {
 }
 
 
-exports.getSales = async (req, res) => {
-    try {
-        const {
-            search = '',
-            filter = 'Semua',
-            filterShipping,
-            page = 1,
-            perPage = 20
-        } = req.query
-
-        const userId = mongoose.Types.ObjectId(req.user._id)
-        const today = new Date(new Date().setHours(0,0,0,0))
-
-        const match = buildMatch({ search, filter, filterShipping, userId, today })
-
-        const result = await OnlineModel.aggregate([
-            { $match: match },
-
-            {
-                $facet: {
-                    sales: [
-                        { $sort: { createdAt: -1 } },
-                        { $skip: (page - 1) * perPage },
-                        { $limit: +perPage },
-
-                        { $lookup: { from: 'banks', localField: 'bankId', foreignField: '_id', as: 'bank' }},
-                        { $unwind: '$bank' },
-
-                        { $lookup: { from: 'customers', localField: 'dropshipperId', foreignField: '_id', as: 'dropshipper' }},
-                        { $unwind: { path: '$dropshipper', preserveNullAndEmptyArrays: true }},
-
-                        { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as: 'customer' }},
-                        { $unwind: '$customer' },
-
-                        { $lookup: { from: 'marketplaces', localField: 'customer.marketplaceId', foreignField: '_id', as: 'marketplace' }},
-                        { $unwind: '$marketplace' },
-
-                        { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' }},
-                        { $unwind: '$user' },
-
-                        { $lookup: { from: 'shippings', localField: 'shippingId', foreignField: '_id', as: 'shipping' }},
-                        { $unwind: '$shipping' },
-
-                        {
-                            $addFields: {
-                                customerName: {
-                                    $ifNull: ['$dropshipper.name', '$customer.name']
-                                },
-                                marketplace: '$marketplace.name',
-                                marketplaceLogo: '$marketplace.logo',
-                                bank: '$bank.icon',
-                                user: '$user.name',
-                                shippingLogo: '$shipping.logo'
-                            }
-                        }
-                    ],
-
-                    totalItems: [
-                        { $count: 'count' }
-                    ],
-
-                    shipStats: [
-                        {
-                            $group: {
-                                _id: '$shippingId',
-                                name: { $first: '$shippingName' },
-                                count: { $sum: 1 }
-                            }
-                        },
-                        { $sort: { count: -1 } }
-                    ],
-
-                    stats: [
-                        {
-                            $group: {
-                                _id: null,
-                                today: { $sum: { $cond: [{ $gte: ['$createdAt', today] }, 1, 0] } },
-                                printed: { $sum: { $cond: [{ $eq: ['$isPrinted', false] }, 1, 0] } },
-                                ship: { $sum: { $cond: [{ $and: [{ $eq: ['$resi', null] }, { $eq: ['$isPrinted', true] }] }, 1, 0] } },
-                                me: { $sum: { $cond: [{ $and: [{ $eq: ['$userId', userId] }, { $gte: ['$createdAt', today] }] }, 1, 0] } },
-                            }
-                        }
-                    ]
-                }
-            }
-        ])
-
-        const total = result[0].totalItems[0]?.count || 0
-
-        res.json({
-            sales: result[0].sales,
-            ships: result[0].shipStats,
-            stats: result[0].stats[0],
+exports.getSales = (req, res) => {
+    const search = req.query.search
+    const filter = req.query.filter
+    const filterShipping = req.query.filterShipping
+    const userId = mongoose.Types.ObjectId(req.user._id)
+    const date = new Date();
+    let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    let query = {}
+    let shipCount = {}
+    switch (filter) {
+        case 'Semua': 
+        query = {customerName: {$regex: '.*'+search, $options: 'i'}}
+        break;
+        case 'Saya': 
+        query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {userId: userId}, {createdAt: {$gte: today}}]}
+        shipCount = {$and: [{userId: userId}, {createdAt: {$gte: today}}]}
+        break;
+        case 'Hari ini': 
+        query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {createdAt: {$gte: today}}]}
+        shipCount = {createdAt: {$gte: today}}
+        break;
+        case 'Belum diprint': 
+        query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {isPrinted: false}]}
+        shipCount = {isPrinted: false}
+        break;
+        case 'Siap dikirim': 
+        query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {resi: null}, {isPrinted: true}]}
+        shipCount = {$and: [{resi: null}, {isPrinted: true}]}
+        break;
+    }
+    if(filterShipping) {
+        const shippingId = mongoose.Types.ObjectId(filterShipping)
+        if(filter == 'Semua') {
+            query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {shippingId: shippingId}]}
+        }
+        if(filter == 'Saya') {
+            query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {userId: userId}, {createdAt: {$gte: today}}, {shippingId: shippingId}]}
+        }
+        if(filter == 'Hari ini') {
+            query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {createdAt: {$gte: today}}, {shippingId: shippingId}]}
+        }
+        if(filter == 'Belum diprint') {
+            query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {isPrinted: false}, {shippingId: shippingId}]}
+        }
+        if(filter == 'Siap dikirim') {
+            query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {resi: null}, {isPrinted: true}, {shippingId: shippingId}]}
+        }
+    }
+    const currentPage = req.query.page || 1
+    const perPage = req.query.perPage || 20
+    const stats = OnlineModel.aggregate([
+        {$group: {
+            _id: null,
+            today: {$sum: {$cond: [{$gte: ['$createdAt', today]}, 1, 0]}},
+            printed: {$sum: {$cond: [{$eq: ['$isPrinted', false]}, 1, 0]}},
+            ship: {$sum: {$cond: [{$and: [{$eq: ['$resi', null]}, {$eq: ['$isPrinted', true]}]}, 1, 0]}},
+            me: {$sum: {$cond: [{$and: [{$eq: ['$userId', userId]}, {$gte: ['$createdAt', today]}]}, 1, 0]}},
+        }}
+    ])
+    const ship = OnlineModel.aggregate([
+        {$match: shipCount},
+        {$group: {
+            _id: '$shippingId',
+            name: {$first: '$shippingName'},
+            count: {$sum: 1}
+        }},
+        {$sort: {count: 1}}
+    ])
+    const totalItems = OnlineModel.aggregate([
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: 'customerId',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$addFields: {
+            customerName: '$customer.name'
+        }},
+        {$match: query},
+        {$count: 'count'}
+    ])
+    const sales = OnlineModel.aggregate([
+        {$sort: {createdAt: -1}},
+        {$lookup: {
+            from: 'banks',
+            foreignField: '_id',
+            localField: 'bankId',
+            as: 'bank'
+        }},
+        {$unwind: '$bank'},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: 'dropshipperId',
+            as: 'dropshipper'
+        }},
+        {$unwind: {
+            path: '$dropshipper',
+            preserveNullAndEmptyArrays: true
+        }},
+        {$lookup: {
+            from: 'customers',
+            foreignField: '_id',
+            localField: 'customerId',
+            as: 'customer'
+        }},
+        {$unwind: '$customer'},
+        {$lookup: {
+            from: 'marketplaces',
+            foreignField: '_id',
+            localField: 'customer.marketplaceId',
+            as: 'marketplace'
+        }},
+        {$unwind: '$marketplace'},
+        {$lookup: {
+            from: 'users',
+            foreignField: '_id',
+            localField: 'userId',
+            as: 'user'
+        }},
+        {$unwind: '$user'},
+        {$lookup: {
+            from: 'shippings',
+            foreignField: '_id',
+            localField: 'shippingId',
+            as: 'shippingLogo',
+        }},
+        {$unwind: '$shippingLogo'},
+        {$addFields: {
+            customerName: {$cond: [{$ifNull: ['$dropshipper.name', false]}, '$dropshipper.name', '$customer.name']},
+            marketplace: '$marketplace.name',
+            marketplaceLogo: '$marketplace.logo',
+            bank: '$bank.icon',
+            user: '$user.name',
+            shippingLogo: '$shippingLogo.logo'
+        }},
+        {$match: query},
+        {$skip: (currentPage-1) * perPage},
+        {$limit: perPage},
+    ])
+    Promise.all([
+        stats,
+        ship,
+        totalItems,
+        sales,
+    ])
+    .then(result => {
+        let count = 0
+        if(result[2].length > 0) {
+            count = result[2][0].count
+        }
+        const last_page = Math.ceil(count / perPage)
+        res.status (200).json({
+            stats: result[0][0],
+            ships: result[1],
+            sales: result[3],
             pages: {
-                current_page: +page,
-                last_page: Math.ceil(total / perPage)
+                current_page: currentPage,
+                last_page: last_page
             }
         })
-
-    } catch (err) {
-        res.status(500).json(err)
-    }
+    })
+    .catch(err => [
+        res.status(400).send(err)
+    ])
 }
-
-// exports.getSales = (req, res) => {
-//     const search = req.query.search
-//     const filter = req.query.filter
-//     const filterShipping = req.query.filterShipping
-//     const userId = mongoose.Types.ObjectId(req.user._id)
-//     const date = new Date();
-//     let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-//     let query = {}
-//     let shipCount = {}
-//     switch (filter) {
-//         case 'Semua': 
-//         query = {customerName: {$regex: '.*'+search, $options: 'i'}}
-//         break;
-//         case 'Saya': 
-//         query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {userId: userId}, {createdAt: {$gte: today}}]}
-//         shipCount = {$and: [{userId: userId}, {createdAt: {$gte: today}}]}
-//         break;
-//         case 'Hari ini': 
-//         query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {createdAt: {$gte: today}}]}
-//         shipCount = {createdAt: {$gte: today}}
-//         break;
-//         case 'Belum diprint': 
-//         query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {isPrinted: false}]}
-//         shipCount = {isPrinted: false}
-//         break;
-//         case 'Siap dikirim': 
-//         query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {resi: null}, {isPrinted: true}]}
-//         shipCount = {$and: [{resi: null}, {isPrinted: true}]}
-//         break;
-//     }
-//     if(filterShipping) {
-//         const shippingId = mongoose.Types.ObjectId(filterShipping)
-//         if(filter == 'Semua') {
-//             query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {shippingId: shippingId}]}
-//         }
-//         if(filter == 'Saya') {
-//             query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {userId: userId}, {createdAt: {$gte: today}}, {shippingId: shippingId}]}
-//         }
-//         if(filter == 'Hari ini') {
-//             query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {createdAt: {$gte: today}}, {shippingId: shippingId}]}
-//         }
-//         if(filter == 'Belum diprint') {
-//             query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {isPrinted: false}, {shippingId: shippingId}]}
-//         }
-//         if(filter == 'Siap dikirim') {
-//             query = {$and: [{customerName: {$regex: '.*'+search, $options: 'i'}}, {resi: null}, {isPrinted: true}, {shippingId: shippingId}]}
-//         }
-//     }
-//     const currentPage = req.query.page || 1
-//     const perPage = req.query.perPage || 20
-//     const stats = OnlineModel.aggregate([
-//         {$group: {
-//             _id: null,
-//             today: {$sum: {$cond: [{$gte: ['$createdAt', today]}, 1, 0]}},
-//             printed: {$sum: {$cond: [{$eq: ['$isPrinted', false]}, 1, 0]}},
-//             ship: {$sum: {$cond: [{$and: [{$eq: ['$resi', null]}, {$eq: ['$isPrinted', true]}]}, 1, 0]}},
-//             me: {$sum: {$cond: [{$and: [{$eq: ['$userId', userId]}, {$gte: ['$createdAt', today]}]}, 1, 0]}},
-//         }}
-//     ])
-//     const ship = OnlineModel.aggregate([
-//         {$match: shipCount},
-//         {$group: {
-//             _id: '$shippingId',
-//             name: {$first: '$shippingName'},
-//             count: {$sum: 1}
-//         }},
-//         {$sort: {count: 1}}
-//     ])
-//     const totalItems = OnlineModel.aggregate([
-//         {$lookup: {
-//             from: 'customers',
-//             foreignField: '_id',
-//             localField: 'customerId',
-//             as: 'customer'
-//         }},
-//         {$unwind: '$customer'},
-//         {$addFields: {
-//             customerName: '$customer.name'
-//         }},
-//         {$match: query},
-//         {$count: 'count'}
-//     ])
-//     const sales = OnlineModel.aggregate([
-//         {$sort: {createdAt: -1}},
-//         {$lookup: {
-//             from: 'banks',
-//             foreignField: '_id',
-//             localField: 'bankId',
-//             as: 'bank'
-//         }},
-//         {$unwind: '$bank'},
-//         {$lookup: {
-//             from: 'customers',
-//             foreignField: '_id',
-//             localField: 'dropshipperId',
-//             as: 'dropshipper'
-//         }},
-//         {$unwind: {
-//             path: '$dropshipper',
-//             preserveNullAndEmptyArrays: true
-//         }},
-//         {$lookup: {
-//             from: 'customers',
-//             foreignField: '_id',
-//             localField: 'customerId',
-//             as: 'customer'
-//         }},
-//         {$unwind: '$customer'},
-//         {$lookup: {
-//             from: 'marketplaces',
-//             foreignField: '_id',
-//             localField: 'customer.marketplaceId',
-//             as: 'marketplace'
-//         }},
-//         {$unwind: '$marketplace'},
-//         {$lookup: {
-//             from: 'users',
-//             foreignField: '_id',
-//             localField: 'userId',
-//             as: 'user'
-//         }},
-//         {$unwind: '$user'},
-//         {$lookup: {
-//             from: 'shippings',
-//             foreignField: '_id',
-//             localField: 'shippingId',
-//             as: 'shippingLogo',
-//         }},
-//         {$unwind: '$shippingLogo'},
-//         {$addFields: {
-//             customerName: {$cond: [{$ifNull: ['$dropshipper.name', false]}, '$dropshipper.name', '$customer.name']},
-//             marketplace: '$marketplace.name',
-//             marketplaceLogo: '$marketplace.logo',
-//             bank: '$bank.icon',
-//             user: '$user.name',
-//             shippingLogo: '$shippingLogo.logo'
-//         }},
-//         {$match: query},
-//         {$skip: (currentPage-1) * perPage},
-//         {$limit: perPage},
-//     ])
-//     Promise.all([
-//         stats,
-//         ship,
-//         totalItems,
-//         sales,
-//     ])
-//     .then(result => {
-//         let count = 0
-//         if(result[2].length > 0) {
-//             count = result[2][0].count
-//         }
-//         const last_page = Math.ceil(count / perPage)
-//         res.status (200).json({
-//             stats: result[0][0],
-//             ships: result[1],
-//             sales: result[3],
-//             pages: {
-//                 current_page: currentPage,
-//                 last_page: last_page
-//             }
-//         })
-//     })
-//     .catch(err => [
-//         res.status(400).send(err)
-//     ])
-// }
 
 
 exports.createSale = (req, res) => {
