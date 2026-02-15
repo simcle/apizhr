@@ -9,5 +9,6 @@ router.get('/actions', inventroyIntelController.getActions)
 router.get('/product/:productId', inventroyIntelController.getProductDetail)
 router.get('/dead-stock', inventroyIntelController.getDeadStock)
 router.get('/shops', inventroyIntelController.getShops)
+router.get('/orders', inventroyIntelController.getOrders)
 
 module.exports = router

@@ -2,6 +2,7 @@ const InventoryIntelDaily = require('../models/InventoryIntelDaily');
 const SalesDaily = require('../models/SalesDaily')
 const Shops = require('../models/shops')
 const Product = require('../models/products');
+const ExcelJS = require('exceljs');
 const mongoose = require('mongoose');
 
 // ambil data lates
@@ -222,6 +223,10 @@ exports.getDeadStock = async (req, res) => {
     }
 
     const shopId = req.query.shopId;
+
+    const shopObjectId = shopId
+  ? new mongoose.Types.ObjectId(shopId)
+  : null;
     const level = req.query.level; 
     // WARNING | SERIOUS | CRITICAL
 
@@ -238,6 +243,7 @@ exports.getDeadStock = async (req, res) => {
     // 1️⃣ ambil kandidat dead stock
     const intelRows = await InventoryIntelDaily.find(match)
       .populate('productId', 'name sku price')
+      .populate('shopId', 'name')
       .lean();
 
     if (!intelRows.length) {
@@ -251,7 +257,7 @@ exports.getDeadStock = async (req, res) => {
       {
         $match: {
           productId: { $in: productIds.map(id => new mongoose.Types.ObjectId(id)) },
-          ...(shopId && { shopId: new mongoose.Types.ObjectId(shopId) })
+          ...(shopId && { shopId: shopObjectId })
         }
       },
       {
@@ -274,39 +280,42 @@ exports.getDeadStock = async (req, res) => {
     const result = [];
 
     for (const row of intelRows) {
-      const key = `${row.productId._id}_${row.shopId}`;
-      const lastSold = lastSoldMap.get(key);
-      const daysNoSale = lastSold
-        ? daysBetween(date, lastSold)
-        : 9999;
-
-      let deadLevel = null;
-      let action = null;
-
-      if (daysNoSale >= 365) {
-        deadLevel = "CRITICAL";
-        action = "CLEARANCE";
-      } else if (daysNoSale >= 180) {
-        deadLevel = "SERIOUS";
-        action = "DISCOUNT";
-      } else if (daysNoSale >= 90) {
-        deadLevel = "WARNING";
-        action = "PROMO";
+      if(row.shopId) {
+        const key = `${row.productId._id}_${row.shopId._id}`;
+        if(!key) return
+        const lastSold = lastSoldMap.get(key);
+        const daysNoSale = lastSold
+          ? daysBetween(date, lastSold)
+          : 9999;
+        
+        let deadLevel = null;
+        let action = null;
+  
+        if (daysNoSale >= 365) {
+          deadLevel = "CRITICAL";
+          action = "CLEARANCE";
+        } else if (daysNoSale >= 180) {
+          deadLevel = "SERIOUS";
+          action = "DISCOUNT";
+        } else if (daysNoSale >= 90) {
+          deadLevel = "WARNING";
+          action = "PROMO";
+        }
+  
+        if (!deadLevel) continue;
+        if (level && level !== deadLevel) continue;
+  
+        result.push({
+          date,
+          shopId: row.shopId,
+          product: row.productId,
+          stockOnHand: row.stockOnHand,
+          ads: row.ads,
+          daysNoSale,
+          deadLevel,
+          recommendedAction: action
+        });
       }
-
-      if (!deadLevel) continue;
-      if (level && level !== deadLevel) continue;
-
-      result.push({
-        date,
-        shopId: row.shopId,
-        product: row.productId,
-        stockOnHand: row.stockOnHand,
-        ads: row.ads,
-        daysNoSale,
-        deadLevel,
-        recommendedAction: action
-      });
     }
 
     res.json({
@@ -320,6 +329,199 @@ exports.getDeadStock = async (req, res) => {
     res.status(500).json({ status: false, message: err.message });
   }
 };
+
+exports.getOrders = async (req, res) => {
+  const isExport = req.query.export === 'excel'
+  try {
+    const date = await getLatestSnapshotDate()
+    if (!date) {
+      return res.json({
+        status: true,
+        date: null,
+        total: 0,
+        data: [],
+        message: "Belum ada snapshot inventory intelligence"
+      });
+    }
+    const match = {
+      date,
+      action: 'ORDER'
+    };
+    const orders = await InventoryIntelDaily.aggregate([
+      {$match: match},
+      {$group: {
+        _id: '$productId',
+        date: {$first: '$date'},
+        action: {$addToSet: '$action'},
+        rop: {$sum: '$rop'},
+        ads: {$avg: '$ads'},
+        status: {$addToSet: '$status'},
+        leadTimeDays: {$first: '$leadTimeDays'},
+        totalDemand: {$sum: '$sumSoldWindow'},
+        totalRecommended: { $sum: "$recommendedQty" },
+        totalWarehouseStock: { $first: "$warehouseStockOnHand" },
+        avgPriority: { $avg: "$priorityScore" }
+      }},
+      {
+        $addFields: {
+          netToOrder: {
+            $max: [
+              { $subtract: ["$totalRecommended", "$totalWarehouseStock"] },
+              0
+            ]
+          }
+        }
+      },
+      { $match: { netToOrder: { $gt: 0 } } },
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "product"
+        }
+      },
+      { $unwind: "$product" },
+      {
+        $match: {
+          "product.flow": 'Receipts'
+        }
+      },
+      {
+        $addFields: {
+          parentGroup: {
+            $ifNull: ["$product.parentId", "$_id"]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$parentGroup",
+          variants: {
+            $push: {
+              productId: "$_id",
+              sku: "$product.sku",
+              name: "$product.name",
+              netToOrder: "$netToOrder",
+              totalDemand: "$totalDemand"
+            }
+          },
+          totalNetToOrder: { $sum: "$netToOrder" },
+          totalDemand: { $sum: "$totalDemand" },
+          avgPriority: { $avg: "$avgPriority" }
+        }
+      },
+      {
+        $lookup: {
+          from: "products",
+          localField: "_id",
+          foreignField: "_id",
+          as: "parent"
+        }
+      },
+      { $unwind: "$parent" },
+      {
+        $project: {
+          _id: 0,
+          parentId: "$_id",
+          parentName: "$parent.name",
+          parentSku: "$parent.sku",
+          variants: 1,
+          totalNetToOrder: 1,
+          totalDemand: 1,
+          avgPriority: 1
+        }
+      },
+      { $sort: { avgPriority: -1 } }
+    ])
+    if(!isExport) {
+      res.json({
+        status: true,
+        date,
+        total: orders.length,
+        data: orders
+      });
+    }
+    // =============================
+    // EXCEL EXPORT
+    // =============================
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Purchase Planning');
+
+    sheet.columns = [
+      { header: 'SKU', key: 'sku', width: 15 },
+      { header: 'Nama Barang', key: 'name', width: 40 },
+      { header: 'Demand', key: 'demand', width: 15 },
+      { header: 'Net Order', key: 'net', width: 15 },
+    ];
+
+    // Header Style
+    const headerRow = sheet.getRow(1);
+    headerRow.height = 23;
+    sheet.getRow(1).font = { bold: true, height: 22 };
+    sheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F1E35' }
+    };
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+    orders.forEach(parent => {
+
+      // 🔵 Parent Row
+      const parentRow = sheet.addRow({
+        sku: parent.parentName,
+        name: '',
+        demand: '',
+        net: ''
+      });
+
+      parentRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD9E2F3' }
+      };
+
+      parentRow.font = { bold: true };
+
+      // 🟢 Variant Rows
+      parent.variants.forEach(variant => {
+        sheet.addRow({
+          sku: variant.sku,
+          name: variant.name,
+          demand: variant.totalDemand,
+          net: variant.netToOrder
+        });
+      });
+
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) row.height = 21; // bisa 22/24 sesuai selera
+      });
+      sheet.eachRow((row) => {
+        row.alignment = { vertical: 'middle' };
+      });
+
+    });
+
+    sheet.getColumn('demand').numFmt = '#,##0';
+    sheet.getColumn('net').numFmt = '#,##0';
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=purchase-planning-${date}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    
+  }
+}
 
 exports.getShops = async (req, res) => {
   const data = await Shops.find().sort({name: '1'})
