@@ -157,7 +157,7 @@ const invList = await Inventory.find({
 
     const daysOfCover = ads > EPS ? Number((stockOnHand / ads).toFixed(2)) : (stockOnHand > 0 ? 9999 : 0);
 
-    const leadTimeDays = Number(product.leadTimeDays || 5);
+    const leadTimeDays = Number(product.leadTime || 5);
     const safetyDays = Number(product.safetyDays || 2);
 
     const rop = Number((ads * (leadTimeDays + safetyDays)).toFixed(2));
