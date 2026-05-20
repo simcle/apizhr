@@ -64,6 +64,8 @@ const metrixRouter = require('./src/metrix/router')
 
 const inventoryIntelRouter = require('./src/routers/inventoryIntel');
 
+const stocOrderRouter = require('./src/routers/stockOrder')
+
 app.use('/api/inventory-intel', inventoryIntelRouter)
 
 app.use('/semester', laporanSemester);
@@ -112,6 +114,7 @@ app.use('/purchases', purchaseRoutes);
 app.use('/report', reportRouter);
 app.use('/setor', authenticateToken, setorRouter)
 
+app.use('/stock-order', stocOrderRouter)
 
 
 const PORT = process.env.PORT || 3000;
