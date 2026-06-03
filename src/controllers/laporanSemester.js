@@ -11,8 +11,8 @@ const stockCard = require('../models/stockCard')
 const excel = require('exceljs');
 const mongoose = require('mongoose')
 
-const starDate = new Date('2024-07-01')
-const endDate = new Date('2025-03-30')
+const starDate = new Date('2026-01-01')
+const endDate = new Date('2026-05-22')
 
 exports.getSalesBySupplier = (req, res) => {
     let day;
@@ -769,6 +769,7 @@ exports.getAttlog = (req, res) => {
         }}
     ])
     .then(async(result) => {
+        res.status(200).json(result)
         const workbook = new excel.Workbook()
         const worksheet = workbook.addWorksheet('absensi')
         worksheet.getCell('A1').value = 'KETERANGA'
@@ -786,22 +787,22 @@ exports.getAttlog = (req, res) => {
             for(let a = 0; a < 7; a++) {
                 for(let l = 0; l < el.attlog.length; l++) {
                     const val = el.attlog[l]
-                    if(val.createdAt == '2024-01') {
+                    if(val.createdAt == '2026-01') {
                        worksheet.getRow(row).getCell('B').value = val.count
                     }
-                    if(val.createdAt == '2024-02') {
+                    if(val.createdAt == '2026-02') {
                        worksheet.getRow(row).getCell('C').value = val.count
                     }
-                    if(val.createdAt == '2024-03') {
+                    if(val.createdAt == '2026-03') {
                        worksheet.getRow(row).getCell('D').value = val.count
                     }
-                    if(val.createdAt == '2024-04') {
+                    if(val.createdAt == '2026-04') {
                        worksheet.getRow(row).getCell('E').value = val.count
                     }
-                    if(val.createdAt == '2024-05') {
+                    if(val.createdAt == '2026-05') {
                        worksheet.getRow(row).getCell('F').value = val.count
                     }
-                    if(val.createdAt == '2024-06') {
+                    if(val.createdAt == '2026-06') {
                        worksheet.getRow(row).getCell('G').value = val.count
                     }
                 }
@@ -908,7 +909,7 @@ exports.getEmployee = (req, res) => {
         }}
     ])
     .then(async (result) => {
-        const date = new Date('2024-07-1')
+        const date = new Date('2026-06-1')
         result.forEach(el => {
             el.masaKerja = calcDate(el.bergabung, date)
         })

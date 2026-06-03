@@ -104,7 +104,7 @@ const invList = await Inventory.find({
   // 2) Ambil product metadata untuk semua productId yang muncul di inventory
   const productIds = [...new Set(invList.map(x => String(x.productId)))];
   const products = await Product.find({ _id: { $in: productIds } })
-    .select('_id sku flow leadTimeDays safetyDays isActive')
+    .select('_id sku flow leadTime safetyDays isActive')
     .lean();
 
   const productMap = new Map(products.map(p => [String(p._id), p]));
