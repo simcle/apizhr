@@ -62,11 +62,18 @@ const laporanBulanan = require('./src/routers/laporanBulanan')
 const laporanSemester = require('./src/routers/laporanSemester')
 const metrixRouter = require('./src/metrix/router')
 
-const inventoryIntelRouter = require('./src/routers/inventoryIntel');
+const inventoryIntelRouter = require('./src/routers/inventoryIntel')
+const deadStockIntelRouter = require('./src/routers/deadStockIntel')
+const parentProductHealthRoutes = require('./src/routers/parentProductHealth')
+const transferRecommendationRoutes = require('./src/routers/transferRecommendation')
+
 
 const stocOrderRouter = require('./src/routers/stockOrder')
 
 app.use('/api/inventory-intel', inventoryIntelRouter)
+app.use('/api/dead-stock-intel', deadStockIntelRouter)
+app.use('/api/parent-product-health', parentProductHealthRoutes)
+app.use('/api/transfer-recommendation', transferRecommendationRoutes)
 
 app.use('/semester', laporanSemester);
 app.use('/bulanan', laporanBulanan)
@@ -113,7 +120,6 @@ app.use('/analytics', analyticRoutes);
 app.use('/purchases', purchaseRoutes);
 app.use('/report', reportRouter);
 app.use('/setor', authenticateToken, setorRouter)
-
 app.use('/stock-order', stocOrderRouter)
 
 

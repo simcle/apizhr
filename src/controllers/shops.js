@@ -20,7 +20,8 @@ exports.postShop = (req, res) => {
     const shop = new Shops({
         name: req.body.name,
         address: req.body.address,
-        mobile: req.body.mobile
+        mobile: req.body.mobile,
+        type: req.body.type
     })
     shop.save()
     .then(result => {
@@ -35,6 +36,7 @@ exports.putShop = (req, res) => {
         shop.name = req.body.name
         shop.address = req.body.address
         shop.mobile = req.body.mobile
+        shop.type = req.body.type
         return shop.save()
     })
     .then(() => {
