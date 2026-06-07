@@ -21,3 +21,12 @@ router.get(
 )
 
 module.exports = router
+
+
+// GET /api/transfer-recommendation
+// GET /api/transfer-recommendation?page=1&limit=20
+// GET /api/transfer-recommendation?sourceShopId=xxx
+// GET /api/transfer-recommendation?targetShopId=xxx
+// GET /api/transfer-recommendation?search=kalista
+// GET /api/transfer-recommendation/summary
+// GET /api/transfer-recommendation/685.......

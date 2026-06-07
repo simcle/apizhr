@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const InventoryIntelDaily = require('../models/InventoryIntelDaily')
 const SalesDaily = require('../models/SalesDaily')
-const DeadStockDaily = require('../models/DeadStockDaily')
+const DeadStockDaily = require('../models/deadStockDaily')
 
 function daysBetweenWIB(dateA, dateB) {
   const a = new Date(`${dateA}T00:00:00+07:00`)

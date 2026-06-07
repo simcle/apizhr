@@ -74,3 +74,133 @@ exports.getVariantDeadStock = async (req, res) => {
     })
   }
 }
+
+
+exports.getDeadStockSummary = async (req, res) => {
+  try {
+    let date = req.query.date || await getLatestSnapshotDate()
+    console.log(date)
+    if (!date) {
+      return res.json({
+        status: true,
+        date: null,
+        summary: {
+          totalSku: 0,
+          totalStock: 0,
+          totalStockValue: 0,
+          levels: {
+            WARNING: { count: 0, stockValue: 0 },
+            SERIOUS: { count: 0, stockValue: 0 },
+            CRITICAL: { count: 0, stockValue: 0 }
+          },
+          actions: {
+            PROMO: { count: 0, stockValue: 0 },
+            DISCOUNT: { count: 0, stockValue: 0 },
+            CLEARANCE: { count: 0, stockValue: 0 }
+          }
+        }
+      })
+    }
+    const match = { date }
+    if (req.query.shopId) {
+      match.shopId = new mongoose.Types.ObjectId(req.query.shopId)
+    }
+
+    const rows = await DeadStockDaily.aggregate([
+      { $match: match },
+      {
+        $facet: {
+          overall: [
+            {
+              $group: {
+                _id: null,
+                totalSku: { $sum: 1 },
+                totalStock: { $sum: '$stockOnHand' },
+                totalStockValue: { $sum: '$stockValue' }
+              }
+            }
+          ],
+
+          byLevel: [
+            {
+              $group: {
+                _id: '$deadLevel',
+                count: { $sum: 1 },
+                stock: { $sum: '$stockOnHand' },
+                stockValue: { $sum: '$stockValue' }
+              }
+            }
+          ],
+
+          byAction: [
+            {
+              $group: {
+                _id: '$recommendedAction',
+                count: { $sum: 1 },
+                stock: { $sum: '$stockOnHand' },
+                stockValue: { $sum: '$stockValue' }
+              }
+            }
+          ]
+        }
+      }
+    ])
+
+    const result = rows[0] || {}
+    const overall = result.overall?.[0] || {
+      totalSku: 0,
+      totalStock: 0,
+      totalStockValue: 0
+    }
+
+    const levels = {
+      WARNING: { count: 0, stock: 0, stockValue: 0 },
+      SERIOUS: { count: 0, stock: 0, stockValue: 0 },
+      CRITICAL: { count: 0, stock: 0, stockValue: 0 }
+    }
+
+    for (const item of result.byLevel || []) {
+      if (levels[item._id]) {
+        levels[item._id] = {
+          count: item.count,
+          stock: item.stock,
+          stockValue: item.stockValue
+        }
+      }
+    }
+
+    const actions = {
+      PROMO: { count: 0, stock: 0, stockValue: 0 },
+      DISCOUNT: { count: 0, stock: 0, stockValue: 0 },
+      CLEARANCE: { count: 0, stock: 0, stockValue: 0 }
+    }
+
+    for (const item of result.byAction || []) {
+      if (actions[item._id]) {
+        actions[item._id] = {
+          count: item.count,
+          stock: item.stock,
+          stockValue: item.stockValue
+        }
+      }
+    }
+
+    res.json({
+      status: true,
+      date,
+      shopId: req.query.shopId || null,
+      summary: {
+        totalSku: overall.totalSku,
+        totalStock: overall.totalStock,
+        totalStockValue: overall.totalStockValue,
+        levels,
+        actions
+      }
+    })
+  } catch (err) {
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  }
+}
