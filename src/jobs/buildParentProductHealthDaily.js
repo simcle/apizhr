@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 
-const DeadStockDaily = require('../models/DeadStockDaily')
+const DeadStockDaily = require('../models/deadStockDaily')
 const InventoryIntelDaily = require('../models/InventoryIntelDaily')
 const ParentProductHealthDaily = require('../models/ParentProductHealthDaily')
 
