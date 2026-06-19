@@ -66,7 +66,7 @@ const inventoryIntelRouter = require('./src/routers/inventoryIntel')
 const deadStockIntelRouter = require('./src/routers/deadStockIntel')
 const parentProductHealthRoutes = require('./src/routers/parentProductHealth')
 const transferRecommendationRoutes = require('./src/routers/transferRecommendation')
-
+const reportSalesRouter = require('./src/routers/reportSales')
 
 const stocOrderRouter = require('./src/routers/stockOrder')
 
@@ -74,6 +74,8 @@ app.use('/api/inventory-intel', inventoryIntelRouter)
 app.use('/api/dead-stock-intel', deadStockIntelRouter)
 app.use('/api/parent-product-health', parentProductHealthRoutes)
 app.use('/api/transfer-recommendation', transferRecommendationRoutes)
+
+app.use('/api/report-sales', reportSalesRouter)
 
 app.use('/semester', laporanSemester);
 app.use('/bulanan', laporanBulanan)

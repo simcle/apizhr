@@ -597,3 +597,172 @@ exports.getCategorySales = async (req, res) => {
     })
     
 }
+
+
+
+exports.getPaymentReport = async (req, res) => {
+  try {
+    const start = moment(req.query.start).set('hour', 0).set('minute', 0).set('second', 0).toDate()
+    const end = moment(req.query.end).set('hour', 23).set('minute', 59).set('second', 59).toDate()
+    const match = {}
+
+    if (start && end) {
+      match.createdAt = {
+        $gte: start,
+        $lte: end
+      }
+    }
+
+    // if (shopId) {
+    //   match.shopId = new mongoose.Types.ObjectId(shopId)
+    // }
+
+    const result = await salesModel.aggregate([
+      { $match: match },
+
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                cash: { $sum: '$cash' },
+                transfer: { $sum: '$transfer' },
+                debit: { $sum: '$debit' },
+                grandTotal: { $sum: '$grandTotal' },
+                trxCount: { $sum: 1 }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                cash: { $round: ['$cash', 2] },
+                transfer: { $round: ['$transfer', 2] },
+                debit: { $round: ['$debit', 2] },
+                grandTotal: { $round: ['$grandTotal', 2] },
+                trxCount: 1,
+                totalPayment: {
+                  $round: [
+                    { $add: ['$cash', '$transfer', '$debit'] },
+                    2
+                  ]
+                }
+              }
+            }
+          ],
+
+          bankSummary: [
+            {
+              $match: {
+                bankId: { $ne: null }
+              }
+            },
+            {
+              $group: {
+                _id: '$bankId',
+                transfer: { $sum: '$transfer' },
+                debit: { $sum: '$debit' },
+                trxCount: { $sum: 1 }
+              }
+            },
+            {
+              $lookup: {
+                from: 'banks',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'bank'
+              }
+            },
+            {
+              $unwind: {
+                path: '$bank',
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                bankId: '$_id',
+                bankName: '$bank.name',
+                accountNumber: '$bank.accountNumber',
+                accountName: '$bank.accountName',
+                transfer: { $round: ['$transfer', 2] },
+                debit: { $round: ['$debit', 2] },
+                total: {
+                  $round: [
+                    { $add: ['$transfer', '$debit'] },
+                    2
+                  ]
+                },
+                trxCount: 1
+              }
+            },
+            {
+              $sort: {
+                total: -1
+              }
+            }
+          ],
+
+          paymentMethodSummary: [
+            {
+              $group: {
+                _id: '$paymentMethod',
+                cash: { $sum: '$cash' },
+                transfer: { $sum: '$transfer' },
+                debit: { $sum: '$debit' },
+                grandTotal: { $sum: '$grandTotal' },
+                trxCount: { $sum: 1 }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                paymentMethod: '$_id',
+                cash: { $round: ['$cash', 2] },
+                transfer: { $round: ['$transfer', 2] },
+                debit: { $round: ['$debit', 2] },
+                grandTotal: { $round: ['$grandTotal', 2] },
+                trxCount: 1
+              }
+            },
+            {
+              $sort: {
+                grandTotal: -1
+              }
+            }
+          ]
+        }
+      }
+    ])
+
+    const data = result[0]
+
+    res.json({
+      success: true,
+      data: {
+        summary: data.summary[0] || {
+          cash: 0,
+          transfer: 0,
+          debit: 0,
+          grandTotal: 0,
+          totalPayment: 0,
+          trxCount: 0
+        },
+        bankSummary: data.bankSummary || [],
+        paymentMethodSummary: data.paymentMethodSummary || []
+      }
+    })
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    })
+  }
+}
+
+
+exports.getSalesReport = async (req, res) => {
+    
+} 

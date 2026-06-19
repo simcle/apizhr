@@ -6,6 +6,7 @@ const { buildInventoryIntelForDate } = require('../src/jobs/buildInventoryIntelD
 const { buildDeadStockDailyForDate } = require('../src/jobs/buildDeadStockDaily')
 const { buildParentProductHealthDaily } = require('../src/jobs/buildParentProductHealthDaily')
 const { buildTransferRecommendationDaily } = require('../src/jobs/buildTransferRecommendationDaily')
+const { buildDeadStockGlobalDailyForDate } = require('../src/jobs/buildDeadStockGlobalDaily')
 
 async function main() {
   const dateStr = process.argv[2]; // "YYYY-MM-DD"
@@ -36,6 +37,10 @@ async function main() {
   const r5 = await buildTransferRecommendationDaily(dateStr)
   console.log('TransferRecommendationDaily:', r5)
 
+  console.log('[6] Build Dead Stock Global Daily for:', dateStr)
+  const r6 = await buildDeadStockGlobalDailyForDate(dateStr)
+  console.log('DeadStockGlobalDaily:', r6)
+
   await mongoose.disconnect();
   process.exit(0);
 }
@@ -45,4 +50,4 @@ main().catch(err => {
   process.exit(1);
 });
 
-// WAREHOUSE_SHOP_ID="647aa84733581aaca9c7725b" MONGODB_URI="mongodb://admin:pwlan123@82.29.162.105:27017/zhrleather?authSource=admin" node scripts/run_inv_intel.js 2026-06-05
+// WAREHOUSE_SHOP_ID="647aa84733581aaca9c7725b" MONGODB_URI="mongodb://admin:pwlan123@82.29.162.105:27017/zhrleather?authSource=admin" node scripts/run_inv_intel.js 2026-06-06

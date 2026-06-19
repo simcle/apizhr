@@ -4,6 +4,7 @@ const router = express.Router()
 const reportController = require('../controllers/report')
 
 router.get('/', reportController.getDashboard);
+router.get('/payment', reportController.getPaymentReport)
 router.get('/statistic-offline', reportController.getStatisticsOffline)
 router.get('/statistic-online', reportController.getStatisticsOnline);
 router.get('/statistic-yearly', reportController.getStatisticsOneYear);
