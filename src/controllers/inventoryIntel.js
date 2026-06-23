@@ -204,133 +204,10 @@ exports.getProductDetail = async (req, res) => {
   }
 };
 
-exports.getDeadStock = async (req, res) => {
-  try {
-    let date = req.query.date;
 
-    // 🔥 selalu pakai snapshot terakhir kalau date kosong
-    if (!date) {
-      date = await getLatestSnapshotDate();
-      if (!date) {
-        return res.json({
-          status: true,
-          date: null,
-          total: 0,
-          data: [],
-          message: "Belum ada snapshot inventory intelligence"
-        });
-      }
-    }
-
-    const shopId = req.query.shopId;
-
-    const shopObjectId = shopId
-  ? new mongoose.Types.ObjectId(shopId)
-  : null;
-    const level = req.query.level; 
-    // WARNING | SERIOUS | CRITICAL
-
-    const match = {
-      date,
-      stockOnHand: { $gt: 0 },
-      ads: { $lte: 0.1 }   // hampir tidak laku
-    };
-
-    if (shopId) {
-      match.shopId = new mongoose.Types.ObjectId(shopId);
-    }
-
-    // 1️⃣ ambil kandidat dead stock
-    const intelRows = await InventoryIntelDaily.find(match)
-      .populate('productId', 'name sku price')
-      .populate('shopId', 'name')
-      .lean();
-
-    if (!intelRows.length) {
-      return res.json({ status: true, date, total: 0, data: [] });
-    }
-
-    // 2️⃣ cari tanggal terakhir terjual per product+shop
-    const productIds = [...new Set(intelRows.map(i => i.productId._id.toString()))];
-
-    const lastSales = await SalesDaily.aggregate([
-      {
-        $match: {
-          productId: { $in: productIds.map(id => new mongoose.Types.ObjectId(id)) },
-          ...(shopId && { shopId: shopObjectId })
-        }
-      },
-      {
-        $group: {
-          _id: { productId: "$productId", shopId: "$shopId" },
-          lastSoldDate: { $max: "$date" }
-        }
-      }
-    ]);
-
-    const lastSoldMap = new Map();
-    lastSales.forEach(s => {
-      lastSoldMap.set(
-        `${s._id.productId}_${s._id.shopId}`,
-        s.lastSoldDate
-      );
-    });
-
-    // 3️⃣ klasifikasi dead stock
-    const result = [];
-
-    for (const row of intelRows) {
-      if(row.shopId) {
-        const key = `${row.productId._id}_${row.shopId._id}`;
-        if(!key) return
-        const lastSold = lastSoldMap.get(key);
-        const daysNoSale = lastSold
-          ? daysBetween(date, lastSold)
-          : 9999;
-        
-        let deadLevel = null;
-        let action = null;
-  
-        if (daysNoSale >= 365) {
-          deadLevel = "CRITICAL";
-          action = "CLEARANCE";
-        } else if (daysNoSale >= 180) {
-          deadLevel = "SERIOUS";
-          action = "DISCOUNT";
-        } else if (daysNoSale >= 90) {
-          deadLevel = "WARNING";
-          action = "PROMO";
-        }
-  
-        if (!deadLevel) continue;
-        if (level && level !== deadLevel) continue;
-  
-        result.push({
-          date,
-          shopId: row.shopId,
-          product: row.productId,
-          stockOnHand: row.stockOnHand,
-          ads: row.ads,
-          daysNoSale,
-          deadLevel,
-          recommendedAction: action
-        });
-      }
-    }
-
-    res.json({
-      status: true,
-      date,
-      total: result.length,
-      data: result
-    });
-
-  } catch (err) {
-    res.status(500).json({ status: false, message: err.message });
-  }
-};
 
 exports.getOrders = async (req, res) => {
+  
   const isExport = req.query.export === 'excel'
   try {
     const date = await getLatestSnapshotDate()
@@ -343,6 +220,7 @@ exports.getOrders = async (req, res) => {
         message: "Belum ada snapshot inventory intelligence"
       });
     }
+    
     const match = {
       date,
       action: 'ORDER'

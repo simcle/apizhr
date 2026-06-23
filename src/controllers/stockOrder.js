@@ -4,16 +4,96 @@ const PurchaseModel = require('../models/purchases');
 const ReceiptModel = require('../models/receipts');
 const SalesModel = require('../models/sales')
 const OnlineModel = require('../models/online')
+const InventoryIntelDaily = require ('../models/InventoryIntelDaily')
+
+async function getLatestSnapshotDate() {
+  const latest = await InventoryIntelDaily
+    .findOne({})
+    .sort({ date: -1 })
+    .select('date')
+    .lean();
+
+  return latest?.date || null;
+}
 
 exports.getStatistics = async (req, res) => {
+    const date = await getLatestSnapshotDate()
 
+    
     const startOfMonth = new Date()
     startOfMonth.setDate(1)
     startOfMonth.setHours(0, 0, 0, 0)
 
     const startOfNextMonth = new Date(startOfMonth)
     startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1)
+    const demandForecast = InventoryIntelDaily.aggregate([
+        {
+            $match: {
+                date,
+                action: 'ORDER'
+            }
+        },
+        {$group: {
+            _id: '$productId',
+            date: {$first: '$date'},
+            action: {$addToSet: '$action'},
+            rop: {$sum: '$rop'},
+            ads: {$avg: '$ads'},
+            status: {$addToSet: '$status'},
+            leadTimeDays: {$first: '$leadTimeDays'},
+            totalDemand: {$sum: '$sumSoldWindow'},
+            totalRecommended: { $sum: "$recommendedQty" },
+            totalWarehouseStock: { $first: "$warehouseStockOnHand" },
+            avgPriority: { $avg: "$priorityScore" }
+        }},
+        {
+            $addFields: {
+            netToOrder: {
+                $max: [
+                { $subtract: ["$totalRecommended", "$totalWarehouseStock"] },
+                    0
+                ]
+            }
+            }
+        },
+        { $match: { netToOrder: { $gt: 0 } } },
+        {
+            $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "product"
+            }
+        },
+        { $unwind: "$product" },
+        {
+            $match: {
+            "product.flow": 'Receipts'
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalQty: {$sum: '$netToOrder'}
+            }
+        }
+    ])
 
+    const purchaseThisMonth = PurchaseModel.aggregate([
+        {
+            $match: {
+                invoiceDate: {
+                    $gte: startOfMonth,
+                    $lt: startOfNextMonth
+                }
+            }
+        },
+        {$unwind: '$items'},
+        {$group: {
+            _id: null,
+            totalQty: {$sum: '$items.qty'}
+        }}
+    ])
     const purchase = PurchaseModel.aggregate([
         { $match: { status: 'RFQ SENT' } },
         { $unwind: '$items' },
@@ -66,6 +146,8 @@ exports.getStatistics = async (req, res) => {
 
     ])
     Promise.all([
+        demandForecast,
+        purchaseThisMonth,
         purchase,
         receipt,
         offlineSales,
@@ -73,12 +155,14 @@ exports.getStatistics = async (req, res) => {
     ])
     .then((result) => {
 
-        const offlineSalesQty = result[2][0]?.totalQty || 0
-        const onlineSalesQty = result[3][0]?.totalQty || 0
+        const offlineSalesQty = result[4][0]?.totalQty || 0
+        const onlineSalesQty = result[5][0]?.totalQty || 0
 
         res.status(200).json({
-            purchase: result[0][0]?.totalQty || 0,
-            receipt: result[1][0]?.totalQty || 0,
+            demandForecast: result[0][0]?.totalQty || 0,
+            purchaseThisMonth: result[1][0]?.totalQty || 0,
+            purchase: result[2][0]?.totalQty || 0,
+            receipt: result[3][0]?.totalQty || 0,
             sales: offlineSalesQty + onlineSalesQty
         })
     })

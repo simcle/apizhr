@@ -7,7 +7,6 @@ router.get('/summary', inventroyIntelController.getSummary)
 router.get('/issues', inventroyIntelController.getIssues)
 router.get('/actions', inventroyIntelController.getActions)
 router.get('/product/:productId', inventroyIntelController.getProductDetail)
-router.get('/dead-stock', inventroyIntelController.getDeadStock)
 router.get('/shops', inventroyIntelController.getShops)
 router.get('/orders', inventroyIntelController.getOrders)
 

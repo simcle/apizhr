@@ -7,6 +7,7 @@ const { buildDeadStockDailyForDate } = require('../src/jobs/buildDeadStockDaily'
 const { buildParentProductHealthDaily } = require('../src/jobs/buildParentProductHealthDaily')
 const { buildTransferRecommendationDaily } = require('../src/jobs/buildTransferRecommendationDaily')
 const { buildDeadStockGlobalDailyForDate } = require('../src/jobs/buildDeadStockGlobalDaily')
+const { buildPurchasingPlanDaily } = require('../src/jobs/buildPurchasingPlanDaily')
 
 async function main() {
   const dateStr = process.argv[2]; // "YYYY-MM-DD"
@@ -40,6 +41,10 @@ async function main() {
   console.log('[6] Build Dead Stock Global Daily for:', dateStr)
   const r6 = await buildDeadStockGlobalDailyForDate(dateStr)
   console.log('DeadStockGlobalDaily:', r6)
+
+  console.log('[7] Build Purchasing Plan', dateStr)
+  const r7 = await buildPurchasingPlanDaily(dateStr)
+  console.log('Build Purchasing Plan:', r7)
 
   await mongoose.disconnect();
   process.exit(0);
