@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const StockOpnameModel = require('../models/stockopname');
+const StockOpnameModel = require('../models/StockOpname');
 const SalesModel = require('../models/sales');
 const NgolesModel = require('../models/ngoles');
 const ResellerModel = require('../models/reseller');

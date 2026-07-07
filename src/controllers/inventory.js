@@ -2,6 +2,30 @@ const mongoose = require('mongoose');
 const InventoryModel = require('../models/inventory');
 const ProductModel = require('../models/products');
 
+exports.getInvSummary = (req, res) => {
+    InventoryModel.aggregate([
+        {
+            $group: {
+                _id: '$shopId',
+                totalSku: {$sum: 1},
+                totalStock: {$sum: '$qty'}
+            },
+        },
+        {
+            $lookup: {
+                from: 'shops',
+                foreignField: '_id',
+                localField: '_id',
+                as: 'shop'
+            }
+        },
+       
+    ])
+    .then((result) => {
+        res.status(200).json(result)
+    })
+}
+
 exports.getStock = (req, res) => {
     const productId = mongoose.Types.ObjectId(req.params.productId)
     InventoryModel.aggregate([

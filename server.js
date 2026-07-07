@@ -31,6 +31,7 @@ const brandRoutes = require('./src/routers/brand');
 const categoryRoutes = require('./src/routers/categories');
 const productRoutes = require('./src/routers/products');
 const stockopnameRoutes = require('./src/routers/stockopname');
+const stockOpnameV2Routes = require('./src/routers/stockOpnameV2.routes')
 const salesRoutes = require('./src/routers/sales');
 const ngolesRoutes = require('./src/routers/ngoles');
 const resellerRoutes = require('./src/routers/reseller');
@@ -101,6 +102,8 @@ app.use('/brands', authenticateToken, brandRoutes);
 app.use('/categories', authenticateToken, categoryRoutes );
 app.use('/products', authenticateToken, productRoutes)
 app.use('/stockopname', authenticateToken, stockopnameRoutes);
+app.use('/api/stock-opname-v2', stockOpnameV2Routes);
+app.use('/api/stock-opname-v2-mobile', authenticateToken, stockOpnameV2Routes)
 app.use('/sales', authenticateToken, salesRoutes);
 app.use('/ngoles', authenticateToken, ngolesRoutes);
 app.use('/reseller', authenticateToken, resellerRoutes);

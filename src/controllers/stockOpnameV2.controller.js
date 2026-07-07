@@ -1,0 +1,1285 @@
+const mongoose = require('mongoose')
+
+const StockOpname = require('../models/StockOpname')
+const StockOpnameItem = require('../models/StockOpnameItem')
+const Inventory = require('../models/inventory')
+
+const Product = require('../models/products')
+const StockCard = require('../models/stockCard')
+
+async function generateNumber() {
+
+    const now = new Date()
+
+    const dd = String(now.getDate()).padStart(2, '0')
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const yy = String(now.getFullYear()).slice(-2)
+
+    const startOfDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0, 0, 0, 0
+    )
+
+    const endOfDay = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23, 59, 59, 999
+    )
+
+    const last = await StockOpname
+    .findOne({
+        stockOpnameNumber: {
+            $regex: `ZHR/STOCK/${yy}/`
+        },
+        validated: {
+            $gte: startOfDay,
+            $lte: endOfDay
+        }
+    })
+    .sort({
+        validated: -1
+    })
+    .select('stockOpnameNumber')
+
+    let running = 1
+
+    if (last) {
+
+        const arr = last.stockOpnameNumber.split('/')
+
+        running = Number(arr[arr.length - 1]) + 1
+
+    }
+
+    return `${dd}${mm}/ZHR/STOCK/${yy}/${running}`
+
+}
+
+/**
+ * CREATE SESSION
+ */
+exports.createSession = async (req, res) => {
+  try {
+
+    const {
+      shopId,
+      opnameType,
+      remarks
+    } = req.body
+
+    if (!shopId) {
+      return res.status(400).json({
+        message: 'shopId wajib diisi'
+      })
+    }
+
+    /**
+     * Default FULL
+     */
+    const type = opnameType || 'FULL'
+    
+    /**
+     * Khusus FULL tidak boleh ada session aktif
+     * pada shop yang sama.
+     */
+    if (type === 'FULL') {
+
+      const activeSession = await StockOpname.findOne({
+        shopId,
+        opnameType: 'FULL',
+        status: {
+          $in: [
+            'DRAFT',
+            'COUNTING',
+          ]
+        }
+      })
+
+      if (activeSession) {
+        return res.status(400).json({
+          message: `Stock Opname FULL masih berjalan (${activeSession.stockOpnameNumber})`
+        })
+      }
+
+    }
+    
+    const doc = await StockOpname.create({
+
+      stockOpnameNumber: await generateNumber(),
+
+      shopId,
+
+      opnameType: type,
+
+      remarks: remarks || 'Stock Opname',
+
+      userId: req.body.userId
+
+    })
+
+    res.status(201).json(doc)
+
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
+    })
+
+  }
+}
+
+/**
+ * LIST SESSION
+ */
+exports.getSessions = async (req, res) => {
+  try {
+
+    const page =
+      Number(req.query.page || 1)
+
+    const limit =
+      Number(req.query.limit || 20)
+
+    const skip =
+      (page - 1) * limit
+
+    const query = {}
+
+    if (req.query.status) {
+      query.status = req.query.status
+    }
+
+    if (req.query.shopId) {
+      query.shopId =
+        new mongoose.Types.ObjectId(
+          req.query.shopId
+        )
+    }
+    if(req.query.opnameType) {
+      query.opnameType = req.query.opnameType
+    }
+    if (req.query.search) {
+
+      query.stockOpnameNumber = {
+        $regex: req.query.search,
+        $options: 'i'
+      }
+
+    }
+
+    const total =
+      await StockOpname.countDocuments(
+        query
+      )
+
+    const data =
+      await StockOpname
+        .find(query)
+        .populate(
+          'shopId',
+          'name type'
+        )
+        .populate(
+          'userId',
+          'name'
+        )
+        .populate(
+          'approvedBy',
+          'name'
+        )
+        .populate(
+          'postedBy',
+          'name'
+        )
+        .sort({
+          createdAt: -1
+        })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+
+    res.status(200).json({
+
+      total,
+
+      page,
+
+      limit,
+
+      totalPages:
+        Math.ceil(
+          total / limit
+        ),
+
+      data
+
+    })
+
+  } catch (err) {
+
+    res.status(500).json({
+      message: err.message
+    })
+
+  }
+}
+
+/**
+ * DETAIL SESSION
+ */
+exports.getDetail = async (req, res) => {
+  try {
+
+    const data =
+      await StockOpname
+        .findById(req.params.id)
+
+        .populate(
+          'shopId',
+          'name type'
+        )
+
+        .populate(
+          'userId',
+          'name'
+        )
+
+        .populate(
+          'reviewedBy',
+          'name'
+        )
+
+        .populate(
+          'approvedBy',
+          'name'
+        )
+
+        .populate(
+          'postedBy',
+          'name'
+        )
+
+        .lean()
+
+    if (!data) {
+
+      return res.status(404).json({
+        message:
+          'Stock opname tidak ditemukan'
+      })
+
+    }
+
+    res.status(200).json(data)
+
+  } catch (err) {
+
+    res.status(500).json({
+      message: err.message
+    })
+
+  }
+}
+
+
+exports.generateItems = async (req, res) => {
+  try {
+    const stockOpnameId = req.params.id
+
+    const session = await StockOpname.findById(stockOpnameId)
+
+    if (!session) {
+      return res.status(404).json({
+        status: false,
+        message: 'Stock opname tidak ditemukan'
+      })
+    }
+
+    if (session.status !== 'DRAFT') {
+      return res.status(400).json({
+        status: false,
+        message: 'Generate item hanya bisa dilakukan saat status DRAFT'
+      })
+    }
+
+    if (session.opnameType === 'RANDOM') {
+      return res.status(400).json({
+        status: false,
+        message: 'Opname RANDOM tidak perlu generate item'
+      })
+    }
+
+    const existingItem = await StockOpnameItem.findOne({
+      stockOpnameId: session._id
+    }).select('_id')
+
+    if (existingItem) {
+      return res.status(400).json({
+        status: false,
+        message: 'Item stock opname sudah pernah digenerate'
+      })
+    }
+
+    const match = {
+      shopId: new mongoose.Types.ObjectId(session.shopId)
+    }
+
+    const pipeline = [
+      { $match: match },
+
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productId',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+
+      { $unwind: '$product' },
+
+      {
+        $addFields: {
+          parentGroupId: {
+            $ifNull: [
+              '$product.parentId',
+              '$product._id'
+            ]
+          }
+        }
+      }
+    ]
+
+    if (session.opnameType === 'PARENT') {
+      if (!session.parentId) {
+        return res.status(400).json({
+          status: false,
+          message: 'parentId wajib diisi untuk opnameType PARENT'
+        })
+      }
+
+      pipeline.push({
+        $match: {
+          parentGroupId: new mongoose.Types.ObjectId(session.parentId)
+        }
+      })
+    }
+
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'parentGroupId',
+          foreignField: '_id',
+          as: 'parent'
+        }
+      },
+
+      {
+        $unwind: {
+          path: '$parent',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'product.categoryId',
+          foreignField: '_id',
+          as: 'category'
+        }
+      },
+
+      {
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+
+      {
+        $project: {
+          shopId: 1,
+          productId: 1,
+
+          sku: '$product.sku',
+          name: '$product.name',
+
+          parentId: '$parentGroupId',
+          parentName: {
+            $ifNull: [
+              '$parent.name',
+              '$product.name'
+            ]
+          },
+
+          categoryId: '$product.categoryId',
+          categoryName: '$category.name',
+
+          systemQtySnapshot: '$qty',
+
+          unitCost: {
+            $ifNull: [
+              '$product.purchase',
+              {
+                $ifNull: [
+                  '$product.price',
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      },
+
+      {
+        $sort: {
+          categoryName: 1,
+          parentName: 1,
+          name: 1,
+          sku: 1
+        }
+      }
+    )
+
+    const rows = await Inventory.aggregate(pipeline).allowDiskUse(true)
+
+    if (!rows.length) {
+      return res.status(400).json({
+        status: false,
+        message: 'Tidak ada inventory yang bisa digenerate untuk session ini'
+      })
+    }
+
+    const now = new Date()
+
+    const ops = rows.map(row => ({
+      updateOne: {
+        filter: {
+          stockOpnameId: session._id,
+          productId: row.productId
+        },
+        update: {
+          $setOnInsert: {
+            stockOpnameId: session._id,
+            shopId: session.shopId,
+
+            productId: row.productId,
+
+            sku: row.sku,
+            name: row.name,
+
+            parentId: row.parentId || null,
+            parentName: row.parentName || null,
+
+            categoryId: row.categoryId || null,
+            categoryName: row.categoryName || null,
+
+            systemQtySnapshot: Number(row.systemQtySnapshot) || 0,
+
+            countedQty: null,
+            differenceQty: 0,
+
+            unitCost: row.unitCost || 0,
+            differenceValue: 0,
+
+            countStatus: 'NOT_COUNTED',
+
+            note: '',
+            countedAt: null,
+            countedBy: null,
+
+            lastUpdatedAt: null,
+            lastUpdatedBy: null,
+
+            sortKey: [
+              row.categoryName || '',
+              row.parentName || '',
+              row.name || '',
+              row.sku || ''
+            ].join('|')
+          }
+        },
+        upsert: true
+      }
+    }))
+
+    await StockOpnameItem.bulkWrite(ops, {
+      ordered: false
+    })
+
+    const totalSystemQty = rows.reduce((sum, row) => {
+      return sum + (row.systemQtySnapshot || 0)
+    }, 0)
+
+    await StockOpname.findByIdAndUpdate(session._id, {
+      status: 'COUNTING',
+      startedAt: now,
+      snapshotAt: now,
+      totalItems: rows.length,
+      countedItems: 0,
+      recheckItems: 0,
+      differenceItems: 0,
+      totalSystemQty,
+      totalCountedQty: 0,
+      totalPlusQty: 0,
+      totalMinusQty: 0,
+      totalDifferenceValue: 0
+    })
+
+    res.json({
+      status: true,
+      message: 'Generate item berhasil',
+      stockOpnameId: session._id,
+      totalItems: rows.length,
+      totalSystemQty
+    })
+
+  } catch (err) {
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  }
+}
+
+
+exports.getItems = async (req, res) => {
+  try {
+    const stockOpnameId = req.params.id
+
+    const page = Math.max(Number(req.query.page || 1), 1)
+    const limit = Math.min(Math.max(Number(req.query.limit || 50), 1), 500)
+    const skip = (page - 1) * limit
+
+    const match = {
+      stockOpnameId: new mongoose.Types.ObjectId(stockOpnameId)
+    }
+
+    if (req.query.search) {
+      match.$or = [
+        {
+          sku: {
+            $regex: req.query.search,
+            $options: 'i'
+          }
+        },
+        {
+          name: {
+            $regex: req.query.search,
+            $options: 'i'
+          }
+        },
+        {
+          parentName: {
+            $regex: req.query.search,
+            $options: 'i'
+          }
+        }
+      ]
+    }
+
+    if (req.query.categoryId) {
+      match.categoryId = new mongoose.Types.ObjectId(req.query.categoryId)
+    }
+
+    if (req.query.parentId) {
+      match.parentId = new mongoose.Types.ObjectId(req.query.parentId)
+    }
+
+    if (req.query.countStatus) {
+      match.countStatus = req.query.countStatus
+    }
+
+    if (req.query.onlyDifference === 'true') {
+      match.differenceQty = {
+        $ne: 0
+      }
+    }
+
+    const summaryMatch = {
+      stockOpnameId: new mongoose.Types.ObjectId(stockOpnameId)
+    }
+
+    const [summaryRows, total, data] = await Promise.all([
+      StockOpnameItem.aggregate([
+        { $match: summaryMatch },
+        {
+          $group: {
+            _id: null,
+
+            totalItems: {
+              $sum: 1
+            },
+
+            countedItems: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$countStatus', 'COUNTED'] },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            notCountedItems: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$countStatus', 'NOT_COUNTED'] },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            recheckItems: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$countStatus', 'RECHECK'] },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            differenceItems: {
+              $sum: {
+                $cond: [
+                  { $ne: ['$differenceQty', 0] },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            totalSystemQty: {
+              $sum: '$systemQtySnapshot'
+            },
+
+            totalCountedQty: {
+              $sum: {
+                $ifNull: ['$countedQty', 0]
+              }
+            },
+
+            totalPlusQty: {
+              $sum: {
+                $cond: [
+                  { $gt: ['$differenceQty', 0] },
+                  '$differenceQty',
+                  0
+                ]
+              }
+            },
+
+            totalMinusQty: {
+              $sum: {
+                $cond: [
+                  { $lt: ['$differenceQty', 0] },
+                  '$differenceQty',
+                  0
+                ]
+              }
+            },
+
+            totalDifferenceValue: {
+              $sum: '$differenceValue'
+            }
+          }
+        }
+      ]),
+
+      StockOpnameItem.countDocuments(match),
+
+      StockOpnameItem.find(match)
+        .sort({
+          categoryName: 1,
+          parentName: 1,
+          name: 1,
+          sku: 1
+        })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    ])
+
+    const summary = summaryRows[0] || {
+      totalItems: 0,
+      countedItems: 0,
+      notCountedItems: 0,
+      recheckItems: 0,
+      differenceItems: 0,
+      totalSystemQty: 0,
+      totalCountedQty: 0,
+      totalPlusQty: 0,
+      totalMinusQty: 0,
+      totalDifferenceValue: 0
+    }
+
+    res.json({
+      status: true,
+      stockOpnameId,
+      summary,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data
+    })
+  } catch (err) {
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  }
+}
+
+
+exports.getMobileSummary = async (req, res) => {
+  try {
+
+    const shopId = req.user.shopId
+
+    const session = await StockOpname
+      .findOne({
+        shopId,
+        status: 'COUNTING'
+      })
+      .populate('shopId', 'name')
+      .lean()
+
+    if (!session) {
+      return res.status(404).json({
+        status: false,
+        message: 'Tidak ada stock opname aktif'
+      })
+    }
+
+    const progress =
+      session.totalItems > 0
+        ? Number(
+            (
+              session.countedItems /
+              session.totalItems
+            ) * 100
+          ).toFixed(2)
+        : 0
+
+    res.json({
+      status: true,
+      data: {
+        stockOpnameId: session._id,
+        stockOpnameNumber:
+          session.stockOpnameNumber,
+        shop: session.shopId,
+        opnameType:
+          session.opnameType,
+        status:
+          session.status,
+        snapshotAt:
+          session.snapshotAt,
+        startedAt:
+          session.startedAt,
+        totalItems:
+          session.totalItems,
+        countedItems:
+          session.countedItems,
+        notCountedItems:
+          session.totalItems -
+          session.countedItems,
+        differenceItems:
+          session.differenceItems,
+        totalSystemQty:
+          session.totalSystemQty,
+        totalCountedQty:
+          session.totalCountedQty,
+        totalPlusQty:
+          session.totalPlusQty,
+        totalMinusQty:
+          session.totalMinusQty,
+        totalDifferenceValue:
+          session.totalDifferenceValue,
+        progress
+      }
+    })
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+
+  }
+}
+
+exports.scanItem = async (req, res) => {
+  try {
+
+    const {
+      stockOpnameId,
+      sku
+    } = req.body
+    const shopId = req.user.shopId
+    
+    if (!stockOpnameId) {
+      return res.status(400).json({
+        status: false,
+        message: 'stockOpnameId wajib diisi'
+      })
+    }
+
+    if (!sku) {
+      return res.status(400).json({
+        status: false,
+        message: 'SKU wajib diisi'
+      })
+    }
+
+    const session = await StockOpname.findById(stockOpnameId)
+    
+    
+    if (!session) {
+      return res.status(404).json({
+        status: false,
+        message: 'Session tidak ditemukan'
+      })
+    }
+
+    if (session.status !== 'COUNTING') {
+      return res.status(400).json({
+        status: false,
+        message: 'Session belum masuk COUNTING'
+      })
+    }
+
+    const barcode = sku.trim().toUpperCase()
+    
+    const item = await StockOpnameItem.findOne({
+      stockOpnameId,
+      sku: barcode
+    }).lean()
+    
+    
+    if (item) {
+      const inv = await Inventory.findOne({
+        shopId,
+        productId: item.productId
+      }).lean()
+      
+      return res.json({
+        status: true,
+        found: true,
+        reason: 'FOUND',
+        alreadyCounted:
+          item.countStatus !== 'NOT_COUNTED',
+        item,
+        inv
+      })
+    }
+
+    const product = await Product.findOne({
+      sku: barcode,
+      isActive: true
+    }).select('_id')
+
+    if (product) {
+
+      return res.status(404).json({
+        status: false,
+        found: false,
+        reason: 'NOT_IN_SESSION',
+        message:
+          'Barang bukan bagian dari Stock Opname.'
+      })
+    }
+
+    return res.status(404).json({
+      status: false,
+      found: false,
+      reason: 'NOT_FOUND',
+      message:
+        'SKU tidak ditemukan.'
+    })
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  }
+}
+
+exports.updateCounted = async (req, res) => {
+  const session = await mongoose.startSession()
+
+  try {
+    const itemId = req.params.id
+    const countedQty = Number(req.body.countedQty)
+
+    if (Number.isNaN(countedQty) || countedQty < 0) {
+      return res.status(400).json({
+        status: false,
+        message: 'countedQty tidak valid'
+      })
+    }
+
+    session.startTransaction()
+
+    const oldItem = await StockOpnameItem.findById(itemId).session(session)
+
+    if (!oldItem) {
+      throw new Error('Item stock opname tidak ditemukan')
+    }
+
+    const header = await StockOpname.findById(oldItem.stockOpnameId).session(session)
+
+    if (!header) {
+      throw new Error('Header stock opname tidak ditemukan')
+    }
+
+    if (header.status !== 'COUNTING') {
+      throw new Error('Item hanya bisa diubah saat status COUNTING')
+    }
+
+    if (!['NOT_COUNTED', 'COUNTED'].includes(oldItem.countStatus)) {
+      throw new Error('Item sudah direview dan tidak dapat diubah')
+    }
+
+    const oldWasCounted = oldItem.countStatus === 'COUNTED'
+    const oldCountedQty = oldItem.countedQty || 0
+    const oldDiffQty = oldItem.differenceQty || 0
+    const oldDiffValue = Math.abs(oldItem.differenceValue || 0)
+
+    const oldPlusQty = oldDiffQty > 0 ? oldDiffQty : 0
+    const oldMinusQty = oldDiffQty < 0 ? Math.abs(oldDiffQty) : 0
+    const oldHasDifference = oldDiffQty !== 0
+
+    const inventory = await Inventory.findOne({
+        shopId: oldItem.shopId,
+        productId: oldItem.productId
+    }).session(session)
+    const systemQtyAtCount = inventory
+        ? inventory.qty
+        : 0
+
+    const newDiffQty = countedQty - (oldItem.systemQtySnapshot || 0)
+    const newDiffValue = newDiffQty * (oldItem.unitCost || 0)
+
+    const newPlusQty = newDiffQty > 0 ? newDiffQty : 0
+    const newMinusQty = newDiffQty < 0 ? Math.abs(newDiffQty) : 0
+    const newHasDifference = newDiffQty !== 0
+
+    const countedItemsDelta = oldWasCounted ? 0 : 1
+    const totalCountedQtyDelta = countedQty - oldCountedQty
+    const differenceItemsDelta =
+      (newHasDifference ? 1 : 0) - (oldHasDifference ? 1 : 0)
+
+    const totalPlusQtyDelta = newPlusQty - oldPlusQty
+    const totalMinusQtyDelta = newMinusQty - oldMinusQty
+    const totalDifferenceValueDelta =
+      Math.abs(newDiffValue) - oldDiffValue
+
+    oldItem.countedQty = countedQty
+    oldItem.systemQtyAtCount = systemQtyAtCount
+    oldItem.differenceQty = newDiffQty
+    oldItem.differenceValue = newDiffValue
+    if (oldItem.countStatus === 'NOT_COUNTED') {
+        oldItem.countStatus = 'COUNTED'
+    }
+    oldItem.countedAt = oldItem.countedAt || new Date()
+    oldItem.countedBy = oldItem.countedBy || req.user?._id || null
+    oldItem.lastUpdatedAt = new Date()
+    oldItem.lastUpdatedBy = req.user?._id || null
+
+    await oldItem.save({ session })
+
+    await StockOpname.updateOne(
+      { _id: header._id },
+      {
+        $inc: {
+          countedItems: countedItemsDelta,
+          totalCountedQty: totalCountedQtyDelta,
+          differenceItems: differenceItemsDelta,
+          totalPlusQty: totalPlusQtyDelta,
+          totalMinusQty: totalMinusQtyDelta,
+          totalDifferenceValue: totalDifferenceValueDelta
+        }
+      },
+      { session }
+    )
+
+    await session.commitTransaction()
+
+    const updatedHeader = await StockOpname.findById(header._id).lean()
+    const updatedItem = await StockOpnameItem.findById(itemId).lean()
+
+    res.json({
+      status: true,
+      item: updatedItem,
+      summary: {
+        totalItems: updatedHeader.totalItems,
+        countedItems: updatedHeader.countedItems,
+        recheckItems: updatedHeader.recheckItems,
+        differenceItems: updatedHeader.differenceItems,
+        totalSystemQty: updatedHeader.totalSystemQty,
+        totalCountedQty: updatedHeader.totalCountedQty,
+        totalPlusQty: updatedHeader.totalPlusQty,
+        totalMinusQty: updatedHeader.totalMinusQty,
+        totalDifferenceValue: updatedHeader.totalDifferenceValue
+      }
+    })
+
+  } catch (err) {
+    await session.abortTransaction()
+
+    res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  } finally {
+    session.endSession()
+  }
+}
+
+exports.postBatch = async (req, res) => {
+    const session = await mongoose.startSession()
+
+    try {
+
+        const stockOpnameId = req.params.id
+    
+        session.startTransaction()
+
+        const header = await StockOpname.findById(stockOpnameId).session(session)
+
+        if (!header) {
+            throw new Error('Stock Opname tidak ditemukan')
+        }
+
+        if (header.status !== 'COUNTING') {
+            throw new Error('Stock Opname tidak dapat diposting')
+        }
+
+        const items = await StockOpnameItem.find({
+            stockOpnameId,
+            countStatus: 'COUNTED'
+        }).session(session)
+
+        if (!items.length) {
+
+            await session.abortTransaction()
+
+            return res.status(400).json({
+                status: false,
+                message: 'Tidak ada item yang siap diposting'
+            })
+
+        }
+
+        let posted = 0
+
+        for (const item of items) {
+
+            //---------------------------------------------------
+            // Inventory
+            //---------------------------------------------------
+
+            let inventory = await Inventory.findOne({
+                shopId: item.shopId,
+                productId: item.productId
+            }).session(session)
+
+            if (!inventory) {
+
+                inventory = new Inventory({
+                    shopId: item.shopId,
+                    productId: item.productId,
+                    qty: 0
+                })
+
+                await inventory.save({ session })
+
+            }
+
+            const currentInventory = inventory.qty || 0
+
+            const systemQtyAtCount = item.systemQtyAtCount || 0
+
+            const countedQty = item.countedQty || 0
+
+            const deltaTransaction =
+                currentInventory - systemQtyAtCount
+
+            const inventoryBaru = Math.max(
+                countedQty + deltaTransaction,
+                0
+            )
+
+            inventory.qty = inventoryBaru
+
+            await inventory.save({ session })
+
+            //---------------------------------------------------
+            // Update Product.stock
+            //---------------------------------------------------
+
+            const totalStock = await Inventory.aggregate([
+                {
+                    $match: {
+                        productId: item.productId
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$productId',
+                        qty: {
+                            $sum: '$qty'
+                        }
+                    }
+                }
+            ]).session(session)
+
+            const productStock = totalStock.length ? totalStock[0].qty : 0
+            
+            await Product.updateOne(
+                {
+                    _id: item.productId
+                },
+                {
+                    $set: {
+                        stock: productStock
+                    }
+                },
+                {
+                    session
+                }
+            )
+
+            //---------------------------------------------------
+            // Stock Card
+            //---------------------------------------------------
+
+            const adjustment =
+                inventoryBaru - currentInventory
+
+            await StockCard.create([
+                {
+                    shopId: item.shopId,
+                    productId: item.productId,
+                    documentId: header._id,
+                    documentName: 'Stock Opname',
+                    document: header.stockOpnameNumber,
+                    type: 'STOCK_OPNAME',
+                    stockIn:
+                        adjustment > 0
+                            ? adjustment
+                            : 0,
+                    stockOut:
+                        adjustment < 0
+                            ? Math.abs(adjustment)
+                            : 0,
+                    qtyBefore:
+                        currentInventory,
+                    qtyAfter:
+                        inventoryBaru,
+                    balance:
+                        productStock,
+                    remarks:
+                        'Stock Opname',
+                    userId:
+                        req.user?._id || null
+
+                }
+            ], {
+                session
+            })
+
+            //---------------------------------------------------
+            // Update Item
+            //---------------------------------------------------
+
+            item.countStatus = 'POSTED'
+            item.postedAt = new Date()
+            item.postedBy = req.user?._id || null
+
+            await item.save({ session })
+
+            posted++
+
+        }
+
+        //---------------------------------------------------
+        // Update Header
+        //---------------------------------------------------
+
+        await StockOpname.updateOne(
+            {
+                _id: header._id
+            },
+            {
+                $inc: {
+                    postedItems: posted
+                }
+            },
+            {
+                session
+            }
+        )
+
+        const remain = await StockOpnameItem.countDocuments({
+            stockOpnameId,
+            countStatus: {
+                $in: ['NOT_COUNTED', 'COUNTED']
+            }
+        }).session(session)
+
+        if (remain === 0) {
+
+            await StockOpname.updateOne(
+                {
+                    _id: header._id
+                },
+                {
+                    $set: {
+                        status: 'FINISHED',
+                        finishedAt: new Date(),
+                        postedAt: new Date(),
+                        postedBy: req.user?._id || null
+                    }
+                },
+                {
+                    session
+                }
+            )
+
+        }
+
+        await session.commitTransaction()
+
+        res.json({
+            status: true,
+            posted,
+            remain
+        })
+
+    } catch (err) {
+
+        await session.abortTransaction()
+
+        res.status(500).json({
+            status: false,
+            message: err.message
+        })
+
+    } finally {
+
+        session.endSession()
+
+    }
+}
+

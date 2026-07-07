@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const StockOpnames = require('../models/stockopname');
+const StockOpnames = require('../models/StockOpname');
 const InventoryModel = require('../models/inventory');
 const updateStock =require('../modules/updateStock');
 const stockCard = require('../modules/stockCard')
