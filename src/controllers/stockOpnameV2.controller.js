@@ -1046,177 +1046,292 @@ exports.updateCounted = async (req, res) => {
   }
 }
 
+
+
 exports.postBatch = async (req, res) => {
-    const session = await mongoose.startSession()
 
-    try {
+  const stockOpnameId = req.params.id
+  const userId = req.user?._id || null
 
-        const stockOpnameId = req.params.id
-    
-        session.startTransaction()
+  try {
+    if (!mongoose.Types.ObjectId.isValid(stockOpnameId)) {
+      return res.status(400).json({
+        status: false,
+        message: 'ID Stock Opname tidak valid'
+      })
+    }
 
-        const header = await StockOpname.findById(stockOpnameId).session(session)
+    const header = await StockOpname.findById(stockOpnameId).lean()
 
-        if (!header) {
-            throw new Error('Stock Opname tidak ditemukan')
-        }
+    if (!header) {
+      return res.status(404).json({
+        status: false,
+        message: 'Stock Opname tidak ditemukan'
+      })
+    }
 
-        if (header.status !== 'COUNTING') {
-            throw new Error('Stock Opname tidak dapat diposting')
-        }
+    if (header.status !== 'COUNTING') {
+      return res.status(400).json({
+        status: false,
+        message: 'Stock Opname tidak dapat diposting'
+      })
+    }
 
-        const items = await StockOpnameItem.find({
+    const items = await StockOpnameItem.find({
+      stockOpnameId,
+      countStatus: 'COUNTED'
+    })
+      .sort({ countedAt: 1 })
+      .lean()
+
+    if (!items.length) {
+      return res.status(400).json({
+        status: false,
+        message: 'Tidak ada item yang siap diposting'
+      })
+    }
+
+    let posted = 0
+    const failed = []
+
+    /*
+     * Setiap item diproses dalam transaction sendiri.
+     */
+    for (const sourceItem of items) {
+
+      const dbSession = await mongoose.startSession()
+
+      try {
+        await dbSession.withTransaction(async () => {
+          /*
+           * Ambil ulang item di dalam transaction.
+           * Filter COUNTED mencegah item diposting dua kali.
+           */
+          const item = await StockOpnameItem.findOne({
+            _id: sourceItem._id,
             stockOpnameId,
             countStatus: 'COUNTED'
-        }).session(session)
+          }).session(dbSession)
 
-        if (!items.length) {
+          if (!item) {
+            throw new Error(
+              `Item ${sourceItem.sku || sourceItem._id} sudah diproses atau tidak tersedia`
+            )
+          }
 
-            await session.abortTransaction()
+          if (
+            item.countedQty === null ||
+            item.countedQty === undefined ||
+            item.systemQtyAtCount === null ||
+            item.systemQtyAtCount === undefined
+          ) {
+            throw new Error(
+              `Data counting SKU ${item.sku || item.productId} belum lengkap`
+            )
+          }
 
-            return res.status(400).json({
-                status: false,
-                message: 'Tidak ada item yang siap diposting'
+          /*
+           * Ambil inventory terbaru.
+           */
+
+         
+
+          let inventory = await Inventory.findOne({
+            shopId: item.shopId,
+            productId: item.productId
+          }).session(dbSession)
+
+          if (!inventory) {
+            inventory = new Inventory({
+              shopId: item.shopId,
+              productId: item.productId,
+              qty: 0
             })
+          }
 
-        }
+          const currentInventory = Number(inventory.qty || 0)
+          const systemQtyAtCount = Number(item.systemQtyAtCount)
+          const countedQty = Number(item.countedQty)
 
-        let posted = 0
+          /*
+           * Transaksi yang terjadi setelah operator menyimpan counting.
+           */
+          const deltaTransaction =
+            currentInventory - systemQtyAtCount
 
-        for (const item of items) {
+          /*
+           * Rumus final Stock Opname ZHR.
+           */
+          const newInventoryQty = Math.max(
+            countedQty + deltaTransaction,
+            0
+          )
 
-            //---------------------------------------------------
-            // Inventory
-            //---------------------------------------------------
+          const adjustment =
+            newInventoryQty - currentInventory
 
-            let inventory = await Inventory.findOne({
-                shopId: item.shopId,
+          inventory.qty = newInventoryQty
+
+          await inventory.save({
+            session: dbSession
+          })
+
+          /*
+           * Hitung total stok produk seluruh lokasi.
+           */
+          
+          const totalStockRows = await Inventory.aggregate([
+            {
+              $match: {
                 productId: item.productId
-            }).session(session)
-
-            if (!inventory) {
-
-                inventory = new Inventory({
-                    shopId: item.shopId,
-                    productId: item.productId,
-                    qty: 0
-                })
-
-                await inventory.save({ session })
-
+              }
+            },
+            {
+              $group: {
+                _id: '$productId',
+                qty: {
+                  $sum: '$qty'
+                }
+              }
             }
+          ]).session(dbSession)
 
-            const currentInventory = inventory.qty || 0
+          const productStock =
+            Number(totalStockRows[0]?.qty || 0)
 
-            const systemQtyAtCount = item.systemQtyAtCount || 0
+          const productUpdate = await Product.updateOne(
+            {
+              _id: item.productId
+            },
+            {
+              $set: {
+                stock: productStock
+              }
+            },
+            {
+              session: dbSession
+            }
+          )
 
-            const countedQty = item.countedQty || 0
-
-            const deltaTransaction =
-                currentInventory - systemQtyAtCount
-
-            const inventoryBaru = Math.max(
-                countedQty + deltaTransaction,
-                0
+          if (!productUpdate.matchedCount) {
+            throw new Error(
+              `Product SKU ${item.sku || item.productId} tidak ditemukan`
             )
+          }
 
-            inventory.qty = inventoryBaru
+          /*
+           * Simpan stock card.
+           * Balance adalah total stok seluruh lokasi.
+           */
 
-            await inventory.save({ session })
+          await StockCard.create(
+            [
+              {
+                shopId: item.shopId,
+                productId: item.productId,
 
-            //---------------------------------------------------
-            // Update Product.stock
-            //---------------------------------------------------
+                documentId: header._id,
+                documentName: 'Stock Opname',
+                document: header.stockOpnameNumber,
+                type: 'STOCK_OPNAME',
 
-            const totalStock = await Inventory.aggregate([
-                {
-                    $match: {
-                        productId: item.productId
-                    }
-                },
-                {
-                    $group: {
-                        _id: '$productId',
-                        qty: {
-                            $sum: '$qty'
-                        }
-                    }
-                }
-            ]).session(session)
+                stockIn:
+                  adjustment > 0
+                    ? adjustment
+                    : 0,
 
-            const productStock = totalStock.length ? totalStock[0].qty : 0
-            
-            await Product.updateOne(
-                {
-                    _id: item.productId
-                },
-                {
-                    $set: {
-                        stock: productStock
-                    }
-                },
-                {
-                    session
-                }
-            )
+                stockOut:
+                  adjustment < 0
+                    ? Math.abs(adjustment)
+                    : 0,
 
-            //---------------------------------------------------
-            // Stock Card
-            //---------------------------------------------------
+                qtyBefore: currentInventory,
+                qtyAfter: newInventoryQty,
 
-            const adjustment =
-                inventoryBaru - currentInventory
+                balance: productStock,
 
-            await StockCard.create([
-                {
-                    shopId: item.shopId,
-                    productId: item.productId,
-                    documentId: header._id,
-                    documentName: 'Stock Opname',
-                    document: header.stockOpnameNumber,
-                    type: 'STOCK_OPNAME',
-                    stockIn:
-                        adjustment > 0
-                            ? adjustment
-                            : 0,
-                    stockOut:
-                        adjustment < 0
-                            ? Math.abs(adjustment)
-                            : 0,
-                    qtyBefore:
-                        currentInventory,
-                    qtyAfter:
-                        inventoryBaru,
-                    balance:
-                        productStock,
-                    remarks:
-                        'Stock Opname',
-                    userId:
-                        req.user?._id || null
+                remarks: 'Stock Opname',
+                userId
+              }
+            ],
+            {
+              session: dbSession
+            }
+          )
 
-                }
-            ], {
-                session
-            })
+          /*
+           * Tandai item sudah diposting.
+           */
+          item.countStatus = 'POSTED'
+          item.postedAt = new Date()
+          item.postedBy = userId
+          item.lastUpdatedAt = new Date()
+          item.lastUpdatedBy = userId
 
-            //---------------------------------------------------
-            // Update Item
-            //---------------------------------------------------
+          await item.save({
+            session: dbSession
+          })
+          /*
+           * Tambahkan progress posting header.
+           */
 
-            item.countStatus = 'POSTED'
-            item.postedAt = new Date()
-            item.postedBy = req.user?._id || null
+        })
+        posted += 1
 
-            await item.save({ session })
+      } catch (err) {
+        console.error(
+          `Gagal posting SKU ${sourceItem.sku || sourceItem._id}:`,
+          err
+        )
 
-            posted++
+        failed.push({
+          itemId: sourceItem._id,
+          sku: sourceItem.sku,
+          message: err.message
+        })
 
+      } finally {
+        await dbSession.endSession()
+      }
+    }
+
+    /*
+     * Cek penyelesaian session setelah seluruh batch diproses.
+     */
+    const remain = await StockOpnameItem.countDocuments({
+      stockOpnameId,
+      countStatus: {
+        $in: [
+          'NOT_COUNTED',
+          'COUNTED'
+        ]
+      }
+    })
+
+    let finished = false
+
+    if (remain === 0) {
+      const now = new Date()
+
+      await StockOpname.updateOne(
+        {
+          _id: stockOpnameId,
+          status: 'COUNTING'
+        },
+        {
+          $set: {
+            status: 'FINISHED',
+            finishedAt: now,
+            postedAt: now,
+            postedBy: userId
+          }
         }
+      )
 
-        //---------------------------------------------------
-        // Update Header
-        //---------------------------------------------------
+      finished = true
+    }
 
+    if (posted > 0) {
         await StockOpname.updateOne(
             {
                 _id: header._id
@@ -1225,61 +1340,31 @@ exports.postBatch = async (req, res) => {
                 $inc: {
                     postedItems: posted
                 }
-            },
-            {
-                session
             }
         )
-
-        const remain = await StockOpnameItem.countDocuments({
-            stockOpnameId,
-            countStatus: {
-                $in: ['NOT_COUNTED', 'COUNTED']
-            }
-        }).session(session)
-
-        if (remain === 0) {
-
-            await StockOpname.updateOne(
-                {
-                    _id: header._id
-                },
-                {
-                    $set: {
-                        status: 'FINISHED',
-                        finishedAt: new Date(),
-                        postedAt: new Date(),
-                        postedBy: req.user?._id || null
-                    }
-                },
-                {
-                    session
-                }
-            )
-
-        }
-
-        await session.commitTransaction()
-
-        res.json({
-            status: true,
-            posted,
-            remain
-        })
-
-    } catch (err) {
-
-        await session.abortTransaction()
-
-        res.status(500).json({
-            status: false,
-            message: err.message
-        })
-
-    } finally {
-
-        session.endSession()
-
     }
+
+    return res.status(200).json({
+      status: failed.length === 0,
+      message:
+        failed.length === 0
+          ? `${posted} item berhasil diposting`
+          : `${posted} item berhasil dan ${failed.length} item gagal diposting`,
+      totalReady: items.length,
+      posted,
+      failedCount: failed.length,
+      failed,
+      remain,
+      finished
+    })
+
+  } catch (err) {
+    console.error('postBatch error:', err)
+
+    return res.status(500).json({
+      status: false,
+      message: err.message
+    })
+  }
 }
 

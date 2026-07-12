@@ -22,7 +22,9 @@ const StockCardSchema = new Schema({
   documentName: {
     type: String
   },
-
+  document: {
+    tyep: String
+  },
   type: {
     type: String,
     enum: [
