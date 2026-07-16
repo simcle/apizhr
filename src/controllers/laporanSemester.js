@@ -11,8 +11,8 @@ const stockCard = require('../models/stockCard')
 const excel = require('exceljs');
 const mongoose = require('mongoose')
 
-const starDate = new Date('2026-01-01')
-const endDate = new Date('2026-05-22')
+const starDate = new Date('2025-01-01')
+const endDate = new Date('2025-12-31')
 
 exports.getSalesBySupplier = (req, res) => {
     let day;
@@ -665,39 +665,70 @@ exports.getOnline = (req, res) => {
         worksheet.getCell('H1').value = 'April'
         worksheet.getCell('J1').value = 'Mei'
         worksheet.getCell('L1').value = 'Juni'
+        worksheet.getCell('N1').value = 'Juli'
+        worksheet.getCell('P1').value = 'Agustus'
+        worksheet.getCell('R1').value = 'September'
+        worksheet.getCell('T1').value = 'Oktober'
+        worksheet.getCell('V1').value = 'November'
+        worksheet.getCell('X1').value = 'Desember'
         worksheet.getColumn(1).width = 45
-        worksheet.getRow(2).values = ['', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset']
+        worksheet.getRow(2).values = ['', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset', 'trx', 'omset','trx', 'omset','trx', 'omset','trx', 'omset','trx', 'omset','trx', 'omset','trx', 'omset']
         let row = 2
         for(let i = 0; i < result.length; i ++) {
             row += 1
             const el = result[i]
+           
             worksheet.getRow(row).values = [el._id]
-            for(let a = 0; a < 7; a++) {
+            for(let a = 0; a < 12; a++) {
                 for(let l = 0; l < el.market.length; l++) {
                     const val = el.market[l]
-                    if(val.createdAt == '2024-01') {
+                    if(val.createdAt == '2025-01') {
                        worksheet.getRow(row).getCell('B').value = val.count
                        worksheet.getRow(row).getCell('C').value = val.total
                     }
-                    if(val.createdAt == '2024-02') {
+                    if(val.createdAt == '2025-02') {
                        worksheet.getRow(row).getCell('D').value = val.count
                        worksheet.getRow(row).getCell('E').value = val.total
                     }
-                    if(val.createdAt == '2024-03') {
+                    if(val.createdAt == '2025-03') {
                        worksheet.getRow(row).getCell('F').value = val.count
                        worksheet.getRow(row).getCell('G').value = val.total
                     }
-                    if(val.createdAt == '2024-04') {
+                    if(val.createdAt == '2025-04') {
                        worksheet.getRow(row).getCell('H').value = val.count
                        worksheet.getRow(row).getCell('I').value = val.total
                     }
-                    if(val.createdAt == '2024-05') {
+                    if(val.createdAt == '2025-05') {
                        worksheet.getRow(row).getCell('J').value = val.count
                        worksheet.getRow(row).getCell('K').value = val.total
                     }
-                    if(val.createdAt == '2024-06') {
+                    if(val.createdAt == '2025-06') {
                        worksheet.getRow(row).getCell('L').value = val.count
                        worksheet.getRow(row).getCell('M').value = val.total
+                    }
+                    if(val.createdAt == '2025-07') {
+                       worksheet.getRow(row).getCell('N').value = val.count
+                       worksheet.getRow(row).getCell('O').value = val.total
+                    }
+                    if(val.createdAt == '2025-08') {
+                       worksheet.getRow(row).getCell('P').value = val.count
+                       worksheet.getRow(row).getCell('Q').value = val.total
+                    }
+                    if(val.createdAt == '2025-09') {
+                       worksheet.getRow(row).getCell('R').value = val.count
+                       worksheet.getRow(row).getCell('S').value = val.total
+                    }
+                    if(val.createdAt == '2025-10') {
+                       worksheet.getRow(row).getCell('T').value = val.count
+                       worksheet.getRow(row).getCell('U').value = val.total
+                    }
+                    if(val.createdAt == '2025-11') {
+                       worksheet.getRow(row).getCell('V').value = val.count
+                       worksheet.getRow(row).getCell('W').value = val.total
+                    }
+                    if(val.createdAt == '2025-12') {
+                       worksheet.getRow(row).getCell('X').value = val.count
+                       worksheet.getRow(row).getCell('Y').value = val.total
                     }
                 }
             }
@@ -710,6 +741,7 @@ exports.getOnline = (req, res) => {
         await workbook.xlsx.write(res);
         res.status(200).end();
     })
+    
 }
 
 exports.getMitra = (req, res) => {

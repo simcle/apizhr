@@ -4,6 +4,8 @@ const PurchaseModel = require('../models/purchases');
 const ReceiptModel = require('../models/receipts');
 const SalesModel = require('../models/sales')
 const OnlineModel = require('../models/online')
+const MitraPayments = require('../models/mitraPayment')
+
 const InventoryIntelDaily = require ('../models/InventoryIntelDaily')
 
 async function getLatestSnapshotDate() {
@@ -145,25 +147,39 @@ exports.getStatistics = async (req, res) => {
         }}
 
     ])
+    const mitraSales = MitraPayments.aggregate([
+        {$match: {
+            createdAt: {
+                $gte: startOfMonth,
+                $lt: startOfNextMonth
+            }
+        }},
+        {$unwind: '$items'},
+        {$group: {
+            _id: null,
+            totalQty: {$sum: '$items.qty'}
+        }}
+    ])
     Promise.all([
         demandForecast,
         purchaseThisMonth,
         purchase,
         receipt,
         offlineSales,
-        onlineSales
+        onlineSales,
+        mitraSales
     ])
     .then((result) => {
 
         const offlineSalesQty = result[4][0]?.totalQty || 0
         const onlineSalesQty = result[5][0]?.totalQty || 0
-
+        const mitraSalesQty = result[6][0]?.totalQty || 0
         res.status(200).json({
             demandForecast: result[0][0]?.totalQty || 0,
             purchaseThisMonth: result[1][0]?.totalQty || 0,
             purchase: result[2][0]?.totalQty || 0,
             receipt: result[3][0]?.totalQty || 0,
-            sales: offlineSalesQty + onlineSalesQty
+            sales: offlineSalesQty + onlineSalesQty + mitraSalesQty
         })
     })
 }

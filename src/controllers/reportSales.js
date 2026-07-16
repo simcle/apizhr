@@ -6,6 +6,9 @@ const Ngoles = require('../models/ngoles')
 const MitraPayments = require('../models/mitraPayment')
 const Reseller = require('../models/reseller')
 const Bank = require('../models/banks')
+const Shop = require('../models/shops')
+const Marketplace = require('../models/marketplaces')
+
 const moment = require('moment')
 
 function dateFilter(startDate, endDate, field = 'createdAt') {
@@ -16,6 +19,151 @@ function dateFilter(startDate, endDate, field = 'createdAt') {
       $gte: startDate,
       $lte: endDate
     }
+  }
+}
+
+exports.getSalesShop = async (req, res) => {
+  try {
+    const startDate = moment(req.query.start).set('hour', 0).set('minute', 0).set('second', 0).toDate()
+    const endDate = moment(req.query.end).set('hour', 23).set('minute', 59).set('second', 59).toDate()
+    const baseMatch = dateFilter(startDate, endDate)
+
+    const offlineShop = await Shop.aggregate([
+      { $match: {type: 'STORE'}},
+      { $lookup: {
+          from: 'sales',
+          let: { shopId: '$_id'},
+          pipeline: [
+            { $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$shopId', '$$shopId'] },
+                    { $gte: ['$createdAt', startDate] },
+                    { $lt: ['$createdAt', endDate] }
+                  ]
+                }
+              }
+            },
+            { $group: {
+                _id: null,
+                cash: { $sum: '$cash' },
+                debit: { $sum: '$debit' },
+                transfer: { $sum: '$transfer' }, 
+                trxCount: { $sum: 1 },
+                qtySold: { $sum: { $sum: '$items.qty' }
+                },
+                totalSales: { $sum: '$grandTotal' }
+              }
+            }
+          ],
+          as: 'summary'
+        }
+      },
+      {
+        $unwind: {
+          path: '$summary',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      { $project: {
+          _id: 1,
+          name: 1,
+          type: 1,
+          cash: { $ifNull: ['$summary.cash', 0 ] },
+          debit: { $ifNull: ['$summary.debit', 0 ] },
+          transfer: { $ifNull: ['$summary.transfer', 0] },
+          trxCount: { $ifNull: ['$summary.trxCount', 0] },
+          qtySold: { $ifNull: [ '$summary.qtySold', 0 ] },
+          totalSales: { $ifNull: ['$summary.totalSales', 0 ] }
+        }
+      },
+      { $sort: { totalSales: -1 }}
+    ])
+
+    const onlineShop = await Marketplace.aggregate([
+      {$match: {status: true}},
+      {
+        $lookup: {
+          from: 'onlines',
+          let: {
+            marketId: '$_id'
+          },
+          pipeline: [
+            {
+              $lookup: {
+                from: 'customers',
+                localField: 'customerId',
+                foreignField: '_id',
+                as: 'customer'
+              }
+            },
+            {
+              $unwind: '$customer'
+            },
+            {
+              $match: {
+                ...baseMatch,
+                $expr: {
+                  $eq: ['$customer.marketplaceId', '$$marketId']
+                }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                trxCount: {
+                  $sum: 1
+                },
+                qtySold: {
+                  $sum: {
+                    $sum: '$items.qty'
+                  }
+                },
+                totalSales: {
+                  $sum: '$grandTotal'
+                }
+              }
+            }
+          ],
+          as: 'summary'
+        }
+      },
+      {
+        $unwind: {
+          path: '$summary',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          logo: 1,
+          trxCount: {
+            $ifNull: ['$summary.trxCount', 0]
+          },
+          qtySold: {
+            $ifNull: ['$summary.qtySold', 0]
+          },
+          totalSales: {
+            $ifNull: ['$summary.totalSales', 0]
+          }
+        }
+      },
+      {
+        $sort: {
+          totalSales: -1
+        }
+      }
+    ])
+
+    res.status(200).json({
+      offline: offlineShop,
+      online: onlineShop
+    })
+    
+  } catch (error) {
+    res.status(400).send(error)
   }
 }
 

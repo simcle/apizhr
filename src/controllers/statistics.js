@@ -168,6 +168,10 @@ exports.getStats = (req, res)=> {
         const barangTerjual = result[6]
         const onlineTerjual = result[7]
         const pendapatan = []
+        console.log(sales[3])
+        console.log(online[3])
+        console.log(ngoles)
+        console.log(reseller[3])
         for (let i = 0; i < sales.length; i++) {
             const sale = sales[i]
             pendapatan.push(sale)

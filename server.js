@@ -56,7 +56,7 @@ const analyticRoutes = require('./src/routers/analytics');
 const purchaseRoutes = require('./src/routers/purchases');
 const reportRouter = require('./src/routers/report');
 const setorRouter = require('./src/routers/setor');
-
+const reportAbsensiRouter = require('./src/routers/reportAbsensi')
 
 
 const laporanBulanan = require('./src/routers/laporanBulanan')
@@ -129,7 +129,7 @@ app.use('/purchases', purchaseRoutes);
 app.use('/report', reportRouter);
 app.use('/setor', authenticateToken, setorRouter)
 app.use('/stock-order', stocOrderRouter)
-
+app.use('/report-absensi', reportAbsensiRouter)
 
 const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
