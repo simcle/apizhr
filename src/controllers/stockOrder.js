@@ -184,124 +184,165 @@ exports.getStatistics = async (req, res) => {
     })
 }
 
-exports.getReport = (req, res) => {
-    const startOfMonth = new Date()
-    startOfMonth.setDate(1)
-    startOfMonth.setHours(0, 0, 0, 0)
+exports.getReport = async (req, res) => {
+    try {
+        const startOfMonth = new Date()
+        startOfMonth.setDate(1)
+        startOfMonth.setHours(0, 0, 0, 0)
 
-    const startOfNextMonth = new Date(startOfMonth)
-    startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1)
-    
-    SupplierModel.aggregate([
-        {
-            $lookup: {
-            from: 'purchases',
-            let: { supplierId: '$_id' },
-            pipeline: [
-                {
-                $match: {
-                    $expr: { $eq: ['$supplierId', '$$supplierId'] },
-                    status: 'RFQ SENT'
-                }
-                },
-                { $unwind: '$items' },
-                {
-                $group: {
-                    _id: null,
-                    totalQty: { $sum: '$items.qty' },
-                    invoices: { $addToSet: '$_id' },
-                    createdAt: {$first: '$invoiceDate'}
-                }
-                },
-                {
-                $project: {
-                    _id: 0,
-                    totalQty: 1,
-                    createdAt: 1,
-                    invoiceCount: { $size: '$invoices' }
-                }
-                }
-            ],
-            as: 'purchaseData'
-            }
-        },
-        {
-            $lookup: {
-            from: 'receipts',
-            let: { supplierId: '$_id' },
-            pipeline: [
+        const startOfNextMonth = new Date(startOfMonth)
+        startOfNextMonth.setMonth(startOfNextMonth.getMonth() + 1)
+
+        const [
+            purchaseSummary,
+            receiptSummary,
+            suppliers
+        ] = await Promise.all([
+            PurchaseModel.aggregate([
                 {
                     $match: {
-                        $expr: { $eq: ['$supplierId', '$$supplierId'] },
+                        status: 'RFQ SENT'
+                    }
+                },
+                {
+                    $unwind: '$items'
+                },
+                {
+                    $group: {
+                        _id: '$supplierId',
+                        totalQty: {
+                            $sum: {
+                                $ifNull: ['$items.qty', 0]
+                            }
+                        },
+                        invoiceIds: {
+                            $addToSet: '$_id'
+                        },
+                        invoiceDate: {
+                            $max: '$invoiceDate'
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        totalQty: 1,
+                        invoiceDate: 1,
+                        invoiceCount: {
+                            $size: '$invoiceIds'
+                        }
+                    }
+                }
+            ]),
+
+            ReceiptModel.aggregate([
+                {
+                    $match: {
                         createdAt: {
                             $gte: startOfMonth,
                             $lt: startOfNextMonth
                         }
                     }
                 },
-                { $unwind: '$items' },
                 {
-                $group: {
-                    _id: null,
-                    totalQty: { $sum: '$items.qty' },
-                    receipts: { $addToSet: '$_id' }
-                }
+                    $unwind: '$items'
                 },
                 {
-                $project: {
-                    _id: 0,
-                    totalQty: 1,
-                    receiptCount: { $size: '$receipts' }
+                    $group: {
+                        _id: '$supplierId',
+                        totalQty: {
+                            $sum: {
+                                $ifNull: ['$items.qty', 0]
+                            }
+                        },
+                        receiptIds: {
+                            $addToSet: '$_id'
+                        }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        totalQty: 1,
+                        receiptCount: {
+                            $size: '$receiptIds'
+                        }
+                    }
                 }
+            ]),
+
+            SupplierModel.find(
+                {},
+                {
+                    name: 1
                 }
-            ],
-            as: 'receiptData'
-            }
-        },
-        {
-            $addFields: {
-            sedangProduksi: {
-                $ifNull: [{ $arrayElemAt: ['$purchaseData.totalQty', 0] }, 0]
-            },
-            barangMasuk: {
-                $ifNull: [{ $arrayElemAt: ['$receiptData.totalQty', 0] }, 0]
-            },
-            invoiceCount: {
-                $ifNull: [{ $arrayElemAt: ['$purchaseData.invoiceCount', 0] }, 0]
-            },
-            receiptCount: {
-                $ifNull: [{ $arrayElemAt: ['$receiptData.receiptCount', 0] }, 0]
-            },
-            invoiceDate: {
-                $ifNull: [{ $arrayElemAt: ['$purchaseData.createdAt', 0] }, 0]
-            }
-            }
-        },
-        {
-            $project: {
-            supplier: '$name',
-            sedangProduksi: 1,
-            barangMasuk: 1,
-            invoiceCount: 1,
-            receiptCount: 1,
-            invoiceDate: 1
-            }
-        },
-        {
-            $match: {
-            $or: [
-                { sedangProduksi: { $gt: 0 } },
-                { barangMasuk: { $gt: 0 } }
-            ]
-            }
-        },
-        {
-            $sort: {
-            sedangProduksi: -1
-            }
-        }
-    ])
-    .then(result => {
-        res.status(200).json(result)
-    }) 
+            ).lean()
+        ])
+
+        const purchaseMap = new Map(
+            purchaseSummary.map(item => [
+                item._id.toString(),
+                item
+            ])
+        )
+
+        const receiptMap = new Map(
+            receiptSummary.map(item => [
+                item._id.toString(),
+                item
+            ])
+        )
+
+        const result = suppliers
+            .map(supplier => {
+                const supplierId = supplier._id.toString()
+
+                const purchase =
+                    purchaseMap.get(supplierId)
+
+                const receipt =
+                    receiptMap.get(supplierId)
+
+                return {
+                    _id: supplier._id,
+                    supplier: supplier.name,
+
+                    sedangProduksi:
+                        purchase?.totalQty || 0,
+
+                    barangMasuk:
+                        receipt?.totalQty || 0,
+
+                    invoiceCount:
+                        purchase?.invoiceCount || 0,
+
+                    receiptCount:
+                        receipt?.receiptCount || 0,
+
+                    invoiceDate:
+                        purchase?.invoiceDate || null
+                }
+            })
+            .filter(item =>
+                item.sedangProduksi > 0 ||
+                item.barangMasuk > 0
+            )
+            .sort((a, b) =>
+                b.sedangProduksi -
+                a.sedangProduksi
+            )
+
+        return res.status(200).json(result)
+
+    } catch (error) {
+        console.error(
+            'Error get purchase report:',
+            error
+        )
+
+        return res.status(500).json({
+            message: 'Gagal mengambil laporan supplier',
+            error: error.message
+        })
+    }
 }
