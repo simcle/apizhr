@@ -157,7 +157,7 @@ exports.getDetailTransfer = (req, res) => {
 
 exports.createTransfer = (req, res) => {
     const shopId = req.user.shopId
-    ShopModel.find({_id: {$ne: shopId}}).lean()
+    ShopModel.find({$and: [{_id: {$ne: shopId}, type: {$ne: 'WORKSHOP'}}]}).lean()
     .then(result => {
         const shops = result.map(obj => {
             obj.id = obj._id

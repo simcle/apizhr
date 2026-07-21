@@ -154,8 +154,9 @@ exports.getStockBarangMobile = async (req, res) => {
     
     const search = req.query.search
     var queryString = '\"' + search.split(' ').join('\" \"') + '\"';
+    
     await ProductModel.aggregate([
-        { $match: { $text: { $search: queryString } } },
+        { $match: { isActive: true, $text: { $search: queryString } } },
         // {$limit: 20},
         { $project: { 
             _id: 1,

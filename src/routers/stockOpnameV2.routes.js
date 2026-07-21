@@ -17,8 +17,10 @@ router.post('/:id/post', controller.postBatch)
 // moblie
 
 router.get('/mobile/summary',controller.getMobileSummary)
+router.post('/mobile/random', controller.scanRandomItem)
 router.post('/mobile/scan', controller.scanItem)
 router.patch('/mobile/item/:id', controller.updateCounted)
+
 
 module.exports = router
 

@@ -107,17 +107,11 @@ exports.createSession = async (req, res) => {
     }
     
     const doc = await StockOpname.create({
-
       stockOpnameNumber: await generateNumber(),
-
       shopId,
-
       opnameType: type,
-
       remarks: remarks || 'Stock Opname',
-
       userId: req.body.userId
-
     })
 
     res.status(201).json(doc)
@@ -546,7 +540,6 @@ exports.generateItems = async (req, res) => {
   }
 }
 
-
 exports.getItems = async (req, res) => {
   try {
     const stockOpnameId = req.params.id
@@ -736,7 +729,6 @@ exports.getItems = async (req, res) => {
     })
   }
 }
-
 
 exports.getMobileSummary = async (req, res) => {
   try {
@@ -1045,8 +1037,6 @@ exports.updateCounted = async (req, res) => {
     session.endSession()
   }
 }
-
-
 
 exports.postBatch = async (req, res) => {
 
@@ -1368,3 +1358,223 @@ exports.postBatch = async (req, res) => {
   }
 }
 
+
+exports.scanRandomItem = async (req, res) => {
+  try {
+    const shopId = req.user.shopId
+    const sku = req.body.sku
+    
+    const activeSession = await StockOpname.findOne({
+      shopId,
+      opnameType: 'RANDOM',
+      status: {
+        $in: [
+          'DRAFT',
+          'COUNTING',
+        ]
+      }
+    })
+    let session = activeSession
+    if(!activeSession) {
+      const doc = await StockOpname.create({
+        stockOpnameNumber: await generateNumber(),
+        shopId,
+        opnameType: 'RANDOM',
+        remarks: 'Stock Opname Random',
+        userId: req.body.userId
+      })
+      session = doc
+    }
+  
+    const barcode = sku
+    
+    // item sudah pernah discan?
+    const stockOpnameId = session._id
+    let item = await StockOpnameItem.findOne({
+      stockOpnameId,
+      sku: barcode
+    }).lean()
+  
+    if(item) {
+      const inv = await Inventory.findOne({
+          shopId,
+          productId: item.productId
+      }).lean()
+
+      return res.json({
+          status: true,
+          found: true,
+          alreadyCounted: item.countStatus !== 'NOT_COUNTED',
+          item,
+          inv
+      })
+    }
+  
+    // ambil data produk lengkap
+    const rows = await Product.aggregate([
+        {
+            $match: {
+                sku: barcode,
+                isActive: true
+            }
+        },
+        {
+            $addFields: {
+                parentGroupId: {
+                    $ifNull: [
+                        '$parentId',
+                        '$_id'
+                    ]
+                }
+            }
+        },
+        {
+            $lookup: {
+                from: 'products',
+                localField: 'parentGroupId',
+                foreignField: '_id',
+                as: 'parent'
+            }
+        },
+        {
+            $unwind: {
+                path: '$parent',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $lookup: {
+                from: 'categories',
+                localField: 'categoryId',
+                foreignField: '_id',
+                as: 'category'
+            }
+        },
+        {
+            $unwind: {
+                path: '$category',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $project: {
+                _id: 1,
+                sku: 1,
+                name: 1,
+                parentId: '$parentGroupId',
+                parentName: {
+                    $ifNull: [
+                        '$parent.name',
+                        '$name'
+                    ]
+                },
+                categoryId: 1,
+                categoryName: '$category.name',
+                purchase: 1,
+                price: 1
+            }
+        }
+    ])
+    const product = rows[0]
+    if(!product) {
+      return res.status(404).json({
+        status: false,
+        found: false,
+        message: 'SKU tidak ditemukan'
+      })
+    }
+  
+    // inventory saat scan
+    const inv = await Inventory.findOne({
+      shopId,
+      productId: product._id
+    }).lean()
+
+    if(!inv) {
+      return res.status(404).json({
+        status: false,
+        found: false,
+        reason: 'NOT_IN_SESSION',
+        message:
+          'Barang bukan bagian dari Stock Opname.'
+      })
+    }
+    const qty = Number(inv?.qty || 0)
+  
+    item = await StockOpnameItem.create({
+        stockOpnameId: session._id,
+        shopId,
+        productId: product._id,
+        sku: product.sku,
+        name: product.name,
+        parentId: product.parentId,
+        parentName: product.parentName,
+        categoryId: product.categoryId,
+        categoryName: product.categoryName,
+        systemQtySnapshot: qty,
+        countedQty: null,
+        differenceQty: 0,
+        unitCost:
+            product.purchase ||
+            product.price ||
+            0,
+        differenceValue: 0,
+        countStatus: 'NOT_COUNTED',
+        note: '',
+        countedAt: null,
+        countedBy: null,
+        lastUpdatedAt: null,
+        lastUpdatedBy: null,
+        sortKey: [
+            product.categoryName || '',
+            product.parentName || '',
+            product.name || '',
+            product.sku || ''
+        ].join('|')
+    })
+  
+    // scan pertam
+    if(session.status === 'DRAFT') {
+      await StockOpname.updateOne(
+        {
+            _id: session._id
+        },
+        {
+            $set: {
+                status: 'COUNTING',
+                startedAt: new Date(),
+                snapshotAt: new Date()
+            },
+            $inc: {
+                totalItems: 1,
+                totalSystemQty: qty
+            }
+        }
+      )
+    } else {
+      await StockOpname.updateOne(
+        {
+            _id: session._id
+        },
+        {
+            $inc: {
+                totalItems: 1,
+                totalSystemQty: qty
+            }
+        }
+      )
+    }
+    return res.json({
+        status: true,
+        found: true,
+        alreadyCounted: false,
+        item,
+        inv
+    })
+  } catch (error) {
+   return res.status(500).json({
+        status: false,
+        message: error.message
+    }) 
+  }
+}
