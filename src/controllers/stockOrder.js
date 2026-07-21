@@ -219,7 +219,7 @@ exports.getReport = async (req, res) => {
                             $addToSet: '$_id'
                         },
                         invoiceDate: {
-                            $max: '$invoiceDate'
+                            $min: '$invoiceDate'
                         }
                     }
                 },
