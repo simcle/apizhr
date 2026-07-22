@@ -14,8 +14,10 @@ router.post('/:id/generate', controller.generateItems)
 router.get('/:id/items', controller.getItems)
 router.post('/:id/post', controller.postBatch)
 
-// moblie
+router.post('/:id/generate-zero-count', controller.generateZeroCount)
 
+
+// moblie
 router.get('/mobile/summary',controller.getMobileSummary)
 router.post('/mobile/random', controller.scanRandomItem)
 router.post('/mobile/scan', controller.scanItem)

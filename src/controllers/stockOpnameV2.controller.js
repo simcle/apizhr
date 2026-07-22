@@ -627,6 +627,15 @@ exports.getItems = async (req, res) => {
                 ]
               }
             },
+            postedItems: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$countStatus', 'POSTED'] },
+                  1,
+                  0
+                ]
+              }
+            },
 
             recheckItems: {
               $sum: {
@@ -703,6 +712,7 @@ exports.getItems = async (req, res) => {
       totalItems: 0,
       countedItems: 0,
       notCountedItems: 0,
+      postedItems: 0,
       recheckItems: 0,
       differenceItems: 0,
       totalSystemQty: 0,
@@ -1104,6 +1114,7 @@ exports.postBatch = async (req, res) => {
           }).session(dbSession)
 
           if (!item) {
+            console.log(sourceItem)
             throw new Error(
               `Item ${sourceItem.sku || sourceItem._id} sudah diproses atau tidak tersedia`
             )
@@ -1577,4 +1588,322 @@ exports.scanRandomItem = async (req, res) => {
         message: error.message
     }) 
   }
+}
+
+
+exports.generateZeroCount = async (req, res) => {
+
+    const dbSession = await mongoose.startSession()
+
+    try {
+
+        const stockOpnameId = req.params.id
+        const userId = req.user?._id || null
+
+        if (!mongoose.Types.ObjectId.isValid(stockOpnameId)) {
+            return res.status(400).json({
+                status: false,
+                message: 'Stock Opname tidak valid'
+            })
+        }
+
+        await dbSession.withTransaction(async () => {
+
+            const header = await StockOpname.findById(stockOpnameId)
+                .session(dbSession)
+
+            if (!header) {
+                throw new Error('Stock Opname tidak ditemukan')
+            }
+
+            if (header.status !== 'COUNTING') {
+                throw new Error('Stock Opname tidak dalam proses COUNTING')
+            }
+
+            const items = await StockOpnameItem.find({
+                stockOpnameId,
+                countStatus: 'NOT_COUNTED'
+            }).session(dbSession)
+
+            if (!items.length) {
+                throw new Error('Tidak ada item NOT_COUNTED')
+            }
+
+            /*
+             * Ambil inventory sekaligus
+             */
+            const productIds = items.map(i => i.productId)
+
+            const inventories = await Inventory.find({
+                shopId: header.shopId,
+                productId: {
+                    $in: productIds
+                }
+            })
+            .lean()
+            .session(dbSession)
+
+            const inventoryMap = new Map()
+
+            inventories.forEach(inv => {
+                inventoryMap.set(
+                    inv.productId.toString(),
+                    inv.qty
+                )
+            })
+
+            const now = new Date()
+
+            const ops = items.map(item => {
+
+                const systemQtyAtCount =
+                    Number(
+                        inventoryMap.get(
+                            item.productId.toString()
+                        ) || 0
+                    )
+
+                const differenceQty =
+                    0 - Number(item.systemQtySnapshot || 0)
+
+                const differenceValue =
+                    differenceQty *
+                    Number(item.unitCost || 0)
+
+                return {
+
+                    updateOne: {
+
+                        filter: {
+                            _id: item._id
+                        },
+
+                        update: {
+
+                            $set: {
+
+                                countedQty: 0,
+
+                                systemQtyAtCount,
+
+                                differenceQty,
+
+                                differenceValue,
+
+                                countStatus: 'COUNTED',
+
+                                countedAt: now,
+
+                                countedBy: userId,
+
+                                lastUpdatedAt: now,
+
+                                lastUpdatedBy: userId
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            })
+
+            await StockOpnameItem.bulkWrite(
+                ops,
+                {
+                    session: dbSession,
+                    ordered: false
+                }
+            )
+
+            /*
+             * Hitung ulang summary
+             */
+
+            const summaryRows =
+                await StockOpnameItem.aggregate([
+
+                    {
+                        $match: {
+                            stockOpnameId:
+                                new mongoose.Types.ObjectId(stockOpnameId)
+                        }
+                    },
+
+                    {
+                        $group: {
+
+                            _id: null,
+
+                            totalItems: {
+                                $sum: 1
+                            },
+
+                            countedItems: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $eq: [
+                                                '$countStatus',
+                                                'COUNTED'
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            recheckItems: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $eq: [
+                                                '$countStatus',
+                                                'RECHECK'
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            differenceItems: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $ne: [
+                                                '$differenceQty',
+                                                0
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            totalSystemQty: {
+                                $sum: '$systemQtySnapshot'
+                            },
+
+                            totalCountedQty: {
+                                $sum: {
+                                    $ifNull: [
+                                        '$countedQty',
+                                        0
+                                    ]
+                                }
+                            },
+
+                            totalPlusQty: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $gt: [
+                                                '$differenceQty',
+                                                0
+                                            ]
+                                        },
+                                        '$differenceQty',
+                                        0
+                                    ]
+                                }
+                            },
+
+                            totalMinusQty: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $lt: [
+                                                '$differenceQty',
+                                                0
+                                            ]
+                                        },
+                                        {
+                                            $abs: '$differenceQty'
+                                        },
+                                        0
+                                    ]
+                                }
+                            },
+
+                            totalDifferenceValue: {
+                                $sum: {
+                                    $abs: '$differenceValue'
+                                }
+                            }
+
+                        }
+
+                    }
+
+                ]).session(dbSession)
+
+            const summary = summaryRows[0]
+
+            await StockOpname.updateOne(
+                {
+                    _id: stockOpnameId
+                },
+                {
+                    $set: {
+
+                        totalItems:
+                            summary.totalItems,
+
+                        countedItems:
+                            summary.countedItems,
+
+                        recheckItems:
+                            summary.recheckItems,
+
+                        differenceItems:
+                            summary.differenceItems,
+
+                        totalSystemQty:
+                            summary.totalSystemQty,
+
+                        totalCountedQty:
+                            summary.totalCountedQty,
+
+                        totalPlusQty:
+                            summary.totalPlusQty,
+
+                        totalMinusQty:
+                            summary.totalMinusQty,
+
+                        totalDifferenceValue:
+                            summary.totalDifferenceValue
+
+                    }
+                },
+                {
+                    session: dbSession
+                }
+            )
+
+        })
+
+        return res.json({
+            status: true,
+            message: 'Generate counting 0 berhasil.'
+        })
+
+    } catch (err) {
+
+        return res.status(500).json({
+            status: false,
+            message: err.message
+        })
+
+    } finally {
+
+        dbSession.endSession()
+
+    }
+
 }
