@@ -33,7 +33,7 @@ async function generateNumber() {
         stockOpnameNumber: {
             $regex: `ZHR/STOCK/${yy}/`
         },
-        validated: {
+        createdAt: {
             $gte: startOfDay,
             $lte: endOfDay
         }
@@ -743,7 +743,8 @@ exports.getMobileSummary = async (req, res) => {
     const session = await StockOpname
       .findOne({
         shopId,
-        status: 'COUNTING'
+        status: 'COUNTING',
+        opnameType: 'FULL'
       })
       .populate('shopId', 'name')
       .lean()
