@@ -72,6 +72,10 @@ const reportSalesRouter = require('./src/routers/reportSales')
 const deadStockAssetRoutes = require('./src/routers/deadStockAsset')
 const stocOrderRouter = require('./src/routers/stockOrder')
 
+const storeExpenseCategoryRoter = require('./src/routers/storeExpenseCategory')
+
+app.use('/api/store-expense-categories', authenticateToken, storeExpenseCategoryRoter)
+
 app.use('/api/inventory-intel', inventoryIntelRouter)
 app.use('/api/dead-stock-intel', deadStockIntelRouter)
 app.use('/api/parent-product-health', parentProductHealthRoutes)

@@ -28,7 +28,6 @@ async function generateNumber() {
         now.getDate(),
         23, 59, 59, 999
     )
-
     const last = await StockOpname
     .findOne({
         stockOpnameNumber: {
@@ -40,20 +39,16 @@ async function generateNumber() {
         }
     })
     .sort({
-        validated: -1
+        createdAt: -1
     })
     .select('stockOpnameNumber')
 
     let running = 1
 
     if (last) {
-
         const arr = last.stockOpnameNumber.split('/')
-
         running = Number(arr[arr.length - 1]) + 1
-
     }
-
     return `${dd}${mm}/ZHR/STOCK/${yy}/${running}`
 
 }
