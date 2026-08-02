@@ -73,9 +73,12 @@ const deadStockAssetRoutes = require('./src/routers/deadStockAsset')
 const stocOrderRouter = require('./src/routers/stockOrder')
 
 const storeExpenseCategoryRoter = require('./src/routers/storeExpenseCategory')
+const storeOperationalCashRoutes = require('./src/routers/storeOperationalCash')
 
 app.use('/api/store-expense-categories', authenticateToken, storeExpenseCategoryRoter)
+app.use('/api/store-operational-cash', authenticateToken, storeOperationalCashRoutes)
 
+app.use('/api/expense-report', storeOperationalCashRoutes)
 app.use('/api/inventory-intel', inventoryIntelRouter)
 app.use('/api/dead-stock-intel', deadStockIntelRouter)
 app.use('/api/parent-product-health', parentProductHealthRoutes)

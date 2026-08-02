@@ -4,6 +4,12 @@ const Schema = mongoose.Schema;
 const PengeluaranSchema = new Schema({
     shopId: {type: mongoose.Types.ObjectId},
     item: {type: String},
+    categoryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'StoreExpenseCategory',
+        default: null,
+        index: true
+    },
     harga: {type: Number},
     qty: {type: Number},
     total: {type: Number},

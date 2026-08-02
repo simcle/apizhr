@@ -183,7 +183,7 @@ exports.getSessions = async (req, res) => {
           'name'
         )
         .sort({
-          createdAt: -1
+          createdAt: -1, 
         })
         .skip(skip)
         .limit(limit)

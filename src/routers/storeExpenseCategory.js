@@ -4,15 +4,10 @@ const router = express.Router()
 const storeExpenseCategoryController = require('../controllers/storeExpenseCategory')
 
 router.get('/', storeExpenseCategoryController.getAll)
-
 router.get('/active', storeExpenseCategoryController.getActive)
-
 router.get('/:id', storeExpenseCategoryController.getById)
-
 router.post('/', storeExpenseCategoryController.create)
-
 router.put('/:id', storeExpenseCategoryController.update)
-
 router.delete('/:id', storeExpenseCategoryController.remove)
 
 module.exports = router
