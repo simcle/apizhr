@@ -67,8 +67,6 @@ exports.getPengeluaran = async (req, res) => {
 }
 
 
-
-
 exports.insertPengeluaran = async (req, res) => {
     const session = await mongoose.startSession()
 

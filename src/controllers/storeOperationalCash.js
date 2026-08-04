@@ -2,6 +2,7 @@ const mongoose = require('mongoose')
 
 const StoreOperationalCash = require('../models/StoreOperationalCash')
 const StoreOperationalCashTransaction = require('../models/StoreOperationalCashTransaction')
+const PengeluaranModel = require('../models/pengeluaran')
 
 const moment = require('moment')
 
@@ -701,7 +702,27 @@ exports.getReport = async (req, res) => {
             .endOf('day')
             .toDate()
 
-        const result = await StoreOperationalCashTransaction.aggregate([
+        const cashes = await StoreOperationalCash.aggregate([
+            {
+                $match: {
+                    status: 'ACTIVE'
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalCash: {
+                        $sum: '$balance'
+                    }
+                }
+            }
+        ])
+
+        const totalCash = cashes.length > 0
+            ? cashes[0].totalCash
+            : 0
+
+        const transactions = await StoreOperationalCashTransaction.aggregate([
             {
                 $match: {
                     transactionType: 'OUT',
@@ -724,10 +745,97 @@ exports.getReport = async (req, res) => {
             },
             {
                 $group: {
-                    _id: '$transactionCategory',
+                    _id: null,
+
+                    storeExpense: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$transactionCategory', 'STORE_EXPENSE'] },
+                                '$amount',
+                                0
+                            ]
+                        }
+                    },
+
+                    ownerPersonal: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$transactionCategory', 'OWNER_PERSONAL'] },
+                                '$amount',
+                                0
+                            ]
+                        }
+                    },
+
+                    asonganPurchase: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$transactionCategory', 'ASONGAN_PURCHASE'] },
+                                '$amount',
+                                0
+                            ]
+                        }
+                    },
+
+                    totalTransactions: {
+                        $sum: 1
+                    },
 
                     totalAmount: {
                         $sum: '$amount'
+                    }
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    storeExpense: 1,
+                    ownerPersonal: 1,
+                    asonganPurchase: 1,
+                    totalTransactions: 1,
+                    totalAmount: 1
+                }
+            }
+        ])
+
+        const summary = transactions[0] || {
+            storeExpense: 0,
+            ownerPersonal: 0,
+            asonganPurchase: 0,
+            totalTransactions: 0,
+            totalAmount: 0
+        }
+      
+
+       const pengeluaran = await PengeluaranModel.aggregate([
+            {
+                $match: {
+                    createdAt: {
+                        $gte: startDate,
+                        $lte: endDate
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'storeexpensecategories',
+                    localField: 'categoryId',
+                    foreignField: '_id',
+                    as: 'category'
+                }
+            },
+            {
+                $unwind: '$category'
+            },
+            {
+                $group: {
+                    _id: {
+                        _id: '$category._id',
+                        name: '$category.name'
+                    },
+
+                    totalAmount: {
+                        $sum: '$total'
                     },
 
                     totalTransactions: {
@@ -737,12 +845,12 @@ exports.getReport = async (req, res) => {
             },
             {
                 $sort: {
-                    _id: 1
+                    totalAmount: -1
                 }
             }
         ])
-
-        return res.status(200).json(result)
+        
+        return res.status(200).json({totalCash, summary, pengeluaran})
     } catch (error) {
         console.error('GET REPORT ERROR:', error)
 
