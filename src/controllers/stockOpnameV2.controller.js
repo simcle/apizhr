@@ -1588,11 +1588,9 @@ exports.scanRandomItem = async (req, res) => {
 
 
 exports.generateZeroCount = async (req, res) => {
-
     const dbSession = await mongoose.startSession()
 
     try {
-
         const stockOpnameId = req.params.id
         const userId = req.user?._id || null
 
@@ -1603,147 +1601,205 @@ exports.generateZeroCount = async (req, res) => {
             })
         }
 
-        await dbSession.withTransaction(async () => {
+        let generatedItems = 0
+        let updatedSummary = null
 
-            const header = await StockOpname.findById(stockOpnameId)
+        await dbSession.withTransaction(async () => {
+            /*
+             * Ambil header Stock Opname.
+             */
+            const header = await StockOpname
+                .findById(stockOpnameId)
                 .session(dbSession)
 
             if (!header) {
-                throw new Error('Stock Opname tidak ditemukan')
+                throw new Error(
+                    'Stock Opname tidak ditemukan'
+                )
             }
 
             if (header.status !== 'COUNTING') {
-                throw new Error('Stock Opname tidak dalam proses COUNTING')
-            }
-
-            const items = await StockOpnameItem.find({
-                stockOpnameId,
-                countStatus: 'NOT_COUNTED'
-            }).session(dbSession)
-
-            if (!items.length) {
-                throw new Error('Tidak ada item NOT_COUNTED')
+                throw new Error(
+                    'Stock Opname tidak dalam proses COUNTING'
+                )
             }
 
             /*
-             * Ambil inventory sekaligus
+             * Generate Zero hanya digunakan untuk FULL.
              */
-            const productIds = items.map(i => i.productId)
-
-            const inventories = await Inventory.find({
-                shopId: header.shopId,
-                productId: {
-                    $in: productIds
-                }
-            })
-            .lean()
-            .session(dbSession)
-
-            const inventoryMap = new Map()
-
-            inventories.forEach(inv => {
-                inventoryMap.set(
-                    inv.productId.toString(),
-                    inv.qty
+            if (header.opnameType !== 'FULL') {
+                throw new Error(
+                    'Generate Zero hanya dapat digunakan untuk Stock Opname FULL'
                 )
+            }
+
+            /*
+             * Ambil seluruh item yang belum pernah dihitung.
+             */
+            const items = await StockOpnameItem.find({
+                stockOpnameId: header._id,
+                countStatus: 'NOT_COUNTED'
             })
+                .select(
+                    '_id sku systemQtySnapshot unitCost'
+                )
+                .session(dbSession)
+                .lean()
+
+            if (!items.length) {
+                throw new Error(
+                    'Tidak ada item NOT_COUNTED'
+                )
+            }
 
             const now = new Date()
 
-            const ops = items.map(item => {
+            /*
+             * Generate Zero berarti:
+             *
+             * - Barang yang tercatat pada snapshot sudah dicari.
+             * - Barang tersebut tidak ditemukan secara fisik.
+             * - Hasil counting adalah 0.
+             *
+             * systemQtyAtCount harus memakai systemQtySnapshot,
+             * bukan inventory ketika tombol Generate Zero ditekan.
+             *
+             * Dengan begitu, transfer/receipt yang terjadi setelah
+             * snapshot tetap dipertahankan saat Post Batch.
+             */
+            const operations = items.map(item => {
+                const systemQtySnapshot =
+                    Number(item.systemQtySnapshot || 0)
 
-                const systemQtyAtCount =
-                    Number(
-                        inventoryMap.get(
-                            item.productId.toString()
-                        ) || 0
-                    )
-
-                const differenceQty =
-                    0 - Number(item.systemQtySnapshot || 0)
-
-                const differenceValue =
-                    differenceQty *
+                const unitCost =
                     Number(item.unitCost || 0)
 
+                const countedQty = 0
+
+                const differenceQty =
+                    countedQty - systemQtySnapshot
+
+                const differenceValue =
+                    differenceQty * unitCost
+
                 return {
-
                     updateOne: {
-
+                        /*
+                         * Tambahkan countStatus pada filter agar aman
+                         * jika item berubah status secara bersamaan.
+                         */
                         filter: {
-                            _id: item._id
+                            _id: item._id,
+                            stockOpnameId: header._id,
+                            countStatus: 'NOT_COUNTED'
                         },
 
                         update: {
-
                             $set: {
-
                                 countedQty: 0,
 
-                                systemQtyAtCount,
+                                /*
+                                 * Referensi waktunya adalah snapshot.
+                                 */
+                                systemQtyAtCount:
+                                    systemQtySnapshot,
 
                                 differenceQty,
-
                                 differenceValue,
 
                                 countStatus: 'COUNTED',
 
                                 countedAt: now,
-
                                 countedBy: userId,
 
                                 lastUpdatedAt: now,
-
                                 lastUpdatedBy: userId
-
                             }
-
                         }
-
                     }
-
                 }
-
             })
 
-            await StockOpnameItem.bulkWrite(
-                ops,
-                {
-                    session: dbSession,
-                    ordered: false
-                }
-            )
+            const bulkResult =
+                await StockOpnameItem.bulkWrite(
+                    operations,
+                    {
+                        session: dbSession,
+                        ordered: false
+                    }
+                )
+
+            generatedItems =
+                bulkResult.modifiedCount || 0
 
             /*
-             * Hitung ulang summary
+             * Hitung ulang seluruh summary agar header
+             * kembali sinkron dengan StockOpnameItem.
              */
-
             const summaryRows =
                 await StockOpnameItem.aggregate([
-
                     {
                         $match: {
                             stockOpnameId:
-                                new mongoose.Types.ObjectId(stockOpnameId)
+                                new mongoose.Types.ObjectId(
+                                    stockOpnameId
+                                )
                         }
                     },
-
                     {
                         $group: {
-
                             _id: null,
 
                             totalItems: {
                                 $sum: 1
                             },
 
+                            /*
+                             * POSTED tetap dianggap sudah dihitung.
+                             *
+                             * Ini penting karena Stock Opname dapat
+                             * diposting secara bertahap.
+                             */
                             countedItems: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $in: [
+                                                '$countStatus',
+                                                [
+                                                    'COUNTED',
+                                                    'POSTED'
+                                                ]
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            notCountedItems: {
                                 $sum: {
                                     $cond: [
                                         {
                                             $eq: [
                                                 '$countStatus',
-                                                'COUNTED'
+                                                'NOT_COUNTED'
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            postedItems: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $eq: [
+                                                '$countStatus',
+                                                'POSTED'
                                             ]
                                         },
                                         1,
@@ -1783,7 +1839,12 @@ exports.generateZeroCount = async (req, res) => {
                             },
 
                             totalSystemQty: {
-                                $sum: '$systemQtySnapshot'
+                                $sum: {
+                                    $ifNull: [
+                                        '$systemQtySnapshot',
+                                        0
+                                    ]
+                                }
                             },
 
                             totalCountedQty: {
@@ -1810,6 +1871,9 @@ exports.generateZeroCount = async (req, res) => {
                                 }
                             },
 
+                            /*
+                             * totalMinusQty disimpan dalam nilai positif.
+                             */
                             totalMinusQty: {
                                 $sum: {
                                     $cond: [
@@ -1827,32 +1891,58 @@ exports.generateZeroCount = async (req, res) => {
                                 }
                             },
 
+                            /*
+                             * Nilai selisih ditampilkan secara absolut
+                             * pada summary header.
+                             */
                             totalDifferenceValue: {
                                 $sum: {
-                                    $abs: '$differenceValue'
+                                    $abs: {
+                                        $ifNull: [
+                                            '$differenceValue',
+                                            0
+                                        ]
+                                    }
                                 }
                             }
-
                         }
-
                     }
-
                 ]).session(dbSession)
 
-            const summary = summaryRows[0]
+            const summary = summaryRows[0] || {
+                totalItems: 0,
+                countedItems: 0,
+                notCountedItems: 0,
+                postedItems: 0,
+                recheckItems: 0,
+                differenceItems: 0,
+                totalSystemQty: 0,
+                totalCountedQty: 0,
+                totalPlusQty: 0,
+                totalMinusQty: 0,
+                totalDifferenceValue: 0
+            }
 
+            updatedSummary = summary
+
+            /*
+             * Sinkronkan summary header.
+             */
             await StockOpname.updateOne(
                 {
-                    _id: stockOpnameId
+                    _id: header._id,
+                    status: 'COUNTING'
                 },
                 {
                     $set: {
-
                         totalItems:
                             summary.totalItems,
 
                         countedItems:
                             summary.countedItems,
+
+                        postedItems:
+                            summary.postedItems,
 
                         recheckItems:
                             summary.recheckItems,
@@ -1874,22 +1964,27 @@ exports.generateZeroCount = async (req, res) => {
 
                         totalDifferenceValue:
                             summary.totalDifferenceValue
-
                     }
                 },
                 {
                     session: dbSession
                 }
             )
-
         })
 
-        return res.json({
+        return res.status(200).json({
             status: true,
-            message: 'Generate counting 0 berhasil.'
+            message:
+                `${generatedItems} item berhasil dibuat counting 0`,
+            generatedItems,
+            summary: updatedSummary
         })
 
     } catch (err) {
+        console.error(
+            'generateZeroCount error:',
+            err
+        )
 
         return res.status(500).json({
             status: false,
@@ -1897,9 +1992,6 @@ exports.generateZeroCount = async (req, res) => {
         })
 
     } finally {
-
-        dbSession.endSession()
-
+        await dbSession.endSession()
     }
-
 }
