@@ -48,6 +48,7 @@ const storeOperationalCashTransactionSchema = new mongoose.Schema(
                 'INITIAL_BALANCE',
                 'FUND_ADDITION',
                 'STORE_EXPENSE',
+                'MATERIAL_EXPENSE',
                 'OWNER_PERSONAL',
                 'ASONGAN_PURCHASE',
                 'REFUND',

@@ -257,6 +257,8 @@ exports.insertPengeluaran = async (req, res) => {
             case 'STO-010':
                 transactionCategory = 'OWNER_PERSONAL'
                 break
+            case 'STO-013':
+                transactionCategory = 'MATERIAL_EXPENSE'
             default:
                 transactionCategory = 'STORE_EXPENSE'
                 break

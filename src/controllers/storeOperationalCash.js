@@ -731,7 +731,8 @@ exports.getReport = async (req, res) => {
                         $in: [
                             'STORE_EXPENSE',
                             'OWNER_PERSONAL',
-                            'ASONGAN_PURCHASE'
+                            'ASONGAN_PURCHASE',
+                            'MATERIAL_EXPENSE'
                         ]
                     },
 
@@ -776,6 +777,15 @@ exports.getReport = async (req, res) => {
                             ]
                         }
                     },
+                    materialExpense: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$transactionCategory', 'MATERIAL_EXPENSE'] },
+                                '$amount',
+                                0
+                            ]
+                        }
+                    },
 
                     totalTransactions: {
                         $sum: 1
@@ -792,6 +802,7 @@ exports.getReport = async (req, res) => {
                     storeExpense: 1,
                     ownerPersonal: 1,
                     asonganPurchase: 1,
+                    materialExpense: 1,
                     totalTransactions: 1,
                     totalAmount: 1
                 }
