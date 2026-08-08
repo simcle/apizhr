@@ -202,6 +202,8 @@ exports.getSalesReport = async (req, res) => {
       }
     ])
 
+    const CASH_BANK_ID = new mongoose.Types.ObjectId('64f01ad71e97526902e474d9')
+
     const online = await Online.aggregate([
       {
         $match: baseMatch
@@ -211,16 +213,55 @@ exports.getSalesReport = async (req, res) => {
           source: 'ONLINE',
           trxNo: '$onlineNo',
           shopId: null,
-          grandTotal: { $ifNull: ['$grandTotal', 0] },
 
-          // asumsi online masuk transfer
-          cash: { $literal: 0 },
-          transfer: { $ifNull: ['$grandTotal', 0] },
-          debit: { $literal: 0 },
+          grandTotal: {
+            $ifNull: ['$grandTotal', 0]
+          },
+
+          cash: {
+            $cond: [
+              {
+                $eq: ['$bankId', CASH_BANK_ID]
+              },
+              {
+                $ifNull: ['$grandTotal', 0]
+              },
+              0
+            ]
+          },
+
+          transfer: {
+            $cond: [
+              {
+                $ne: ['$bankId', CASH_BANK_ID]
+              },
+              {
+                $ifNull: ['$grandTotal', 0]
+              },
+              0
+            ]
+          },
+
+          debit: {
+            $literal: 0
+          },
 
           bankId: 1,
-          paymentMethod: { $literal: 'TRANSFER' },
-          qtySold: { $sum: '$items.qty' },
+
+          paymentMethod: {
+            $cond: [
+              {
+                $eq: ['$bankId', CASH_BANK_ID]
+              },
+              'CASH',
+              'TRANSFER'
+            ]
+          },
+
+          qtySold: {
+            $sum: '$items.qty'
+          },
+
           status: 1,
           createdAt: 1
         }
