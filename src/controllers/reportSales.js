@@ -330,33 +330,37 @@ exports.getSalesReport = async (req, res) => {
       }
     ])
     const reseller = await Reseller.aggregate([
-      {
-        $match: {
-          ...baseMatch,
-          ...shopMatch
-        }
-      },
-      {
-        $project: {
-          source: 'RESELLER',
-          trxNo: '$resellerNo',
-          shopId: 1,
-          grandTotal: { $ifNull: ['$grandTotal', 0] },
-          cash: { $ifNull: ['$bayar', 0] },
-          transfer: { $literal: 0 },
-          debit: { $literal: 0 },
-          bankId: null,
-          paymentMethod: {
-            $cond: ['$status', 'LUNAS']
-          },
-          qtySold: { $sum: '$items.qty' },
-          status: 1,
-          bayar: 1,
-          sisa: 1,
-          createdAt: 1
-        }
+    {
+      $match: {
+        ...baseMatch,
+        ...shopMatch,
+        status: 'LUNAS'
       }
-    ])
+    },
+    {
+      $project: {
+        source: 'RESELLER',
+        trxNo: '$resellerNo',
+        shopId: 1,
+
+        grandTotal: { $ifNull: ['$grandTotal', 0] },
+        cash: { $ifNull: ['$bayar', 0] },
+        transfer: { $literal: 0 },
+        debit: { $literal: 0 },
+
+        bankId: null,
+
+        paymentMethod: { $literal: 'LUNAS' },
+
+        qtySold: { $sum: '$items.qty' },
+
+        status: 1,
+        bayar: 1,
+        sisa: 1,
+        createdAt: 1
+      }
+    }
+  ])
 
     const details = [
       ...offline,
