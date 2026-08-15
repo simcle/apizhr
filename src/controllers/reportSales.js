@@ -347,7 +347,7 @@ exports.getSalesReport = async (req, res) => {
           debit: { $literal: 0 },
           bankId: null,
           paymentMethod: {
-            $cond: ['$status', 'LUNAS', 'BELUM LUNAS']
+            $cond: ['$status', 'LUNAS']
           },
           qtySold: { $sum: '$items.qty' },
           status: 1,
