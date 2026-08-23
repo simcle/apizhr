@@ -870,3 +870,52 @@ exports.getReport = async (req, res) => {
         })
     }
 }
+
+
+exports.getPengeluaranByRange = async (req, res) => {
+    try {
+        
+        const { start, end } = req.query
+
+        if (!start || !end) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tanggal start dan end wajib diisi'
+            })
+        }
+
+        const startDate = new Date(start)
+        startDate.setHours(0, 0, 0, 0)
+
+        const endDate = new Date(end)
+        endDate.setHours(23, 59, 59, 999)
+
+        const pengeluaran = await PengeluaranModel
+            .find({
+                createdAt: {
+                    $gte: startDate,
+                    $lte: endDate
+                }
+            })
+            .sort({ createdAt: -1 })
+            .populate('categoryId', 'name')
+            .lean()
+
+        return res.status(200).json({
+            success: true,
+            startDate,
+            endDate,
+            total: pengeluaran.length,
+            pengeluaran
+        })
+
+    } catch (error) {
+        console.error('getPengeluaranByRange:', error)
+
+        return res.status(500).json({
+            success: false,
+            message: 'Terjadi kesalahan pada server',
+            error: error.message
+        })
+    }
+}

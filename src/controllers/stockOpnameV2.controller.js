@@ -1309,7 +1309,10 @@ exports.postBatch = async (req, res) => {
 
     const isRandom = header.type === 'RANDOM'
 
-    if (isRandom || remain === 0) {
+    if (
+      (isRandom && posted > 0) ||
+      (!isRandom && remain === 0)
+    ) {
       const now = new Date()
 
       await StockOpname.updateOne(
