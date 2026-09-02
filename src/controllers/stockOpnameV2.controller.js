@@ -1046,328 +1046,369 @@ exports.updateCounted = async (req, res) => {
 
 exports.postBatch = async (req, res) => {
 
-  const stockOpnameId = req.params.id
-  const userId = req.user?._id || null
+    const stockOpnameId = req.params.id
+    const userId = req.user?._id || null
 
-  try {
-    if (!mongoose.Types.ObjectId.isValid(stockOpnameId)) {
-      return res.status(400).json({
-        status: false,
-        message: 'ID Stock Opname tidak valid'
-      })
-    }
+    try {
+        if (!mongoose.Types.ObjectId.isValid(stockOpnameId)) {
+            return res.status(400).json({
+                status: false,
+                message: 'ID Stock Opname tidak valid'
+            })
+        }
 
-    const header = await StockOpname.findById(stockOpnameId).lean()
+        const header = await StockOpname.findById(stockOpnameId).lean()
 
-    if (!header) {
-      return res.status(404).json({
-        status: false,
-        message: 'Stock Opname tidak ditemukan'
-      })
-    }
+        if (!header) {
+            return res.status(404).json({
+                status: false,
+                message: 'Stock Opname tidak ditemukan'
+            })
+        }
 
-    if (header.status !== 'COUNTING') {
-      return res.status(400).json({
-        status: false,
-        message: 'Stock Opname tidak dapat diposting'
-      })
-    }
+        if (header.status !== 'COUNTING') {
+            return res.status(400).json({
+                status: false,
+                message: 'Stock Opname tidak dapat diposting'
+            })
+        }
 
-    const items = await StockOpnameItem.find({
-      stockOpnameId,
-      countStatus: 'COUNTED'
-    })
-      .sort({ countedAt: 1 })
-      .lean()
+        const isRandom = header.type === 'RANDOM'
 
-    if (!items.length) {
-      return res.status(400).json({
-        status: false,
-        message: 'Tidak ada item yang siap diposting'
-      })
-    }
-
-    let posted = 0
-    const failed = []
-
-    /*
-     * Setiap item diproses dalam transaction sendiri.
-     */
-    for (const sourceItem of items) {
-
-      const dbSession = await mongoose.startSession()
-
-      try {
-        await dbSession.withTransaction(async () => {
-          /*
-           * Ambil ulang item di dalam transaction.
-           * Filter COUNTED mencegah item diposting dua kali.
-           */
-          const item = await StockOpnameItem.findOne({
-            _id: sourceItem._id,
+        const items = await StockOpnameItem.find({
             stockOpnameId,
             countStatus: 'COUNTED'
-          }).session(dbSession)
+        })
+            .sort({ countedAt: 1 })
+            .lean()
 
-          if (!item) {
-            console.log(sourceItem)
-            throw new Error(
-              `Item ${sourceItem.sku || sourceItem._id} sudah diproses atau tidak tersedia`
-            )
-          }
+        /*
+         * Untuk REGULAR, minimal harus ada item yang siap diposting.
+         *
+         * Untuk RANDOM, meskipun tidak ada item COUNTED,
+         * session tetap dianggap selesai.
+         */
+        if (!items.length) {
 
-          if (
-            item.countedQty === null ||
-            item.countedQty === undefined ||
-            item.systemQtyAtCount === null ||
-            item.systemQtyAtCount === undefined
-          ) {
-            throw new Error(
-              `Data counting SKU ${item.sku || item.productId} belum lengkap`
-            )
-          }
+            if (isRandom) {
+                const now = new Date()
 
-          /*
-           * Ambil inventory terbaru.
-           */
+                const finishResult = await StockOpname.updateOne(
+                    {
+                        _id: stockOpnameId,
+                        status: 'COUNTING'
+                    },
+                    {
+                        $set: {
+                            status: 'FINISHED',
+                            finishedAt: now,
+                            postedAt: now,
+                            postedBy: userId
+                        }
+                    }
+                )
 
-         
+                return res.status(200).json({
+                    status: true,
+                    message: 'Random Stock Opname selesai',
+                    totalReady: 0,
+                    posted: 0,
+                    failedCount: 0,
+                    failed: [],
+                    remain: 0,
+                    finished: finishResult.modifiedCount > 0
+                })
+            }
 
-          let inventory = await Inventory.findOne({
-            shopId: item.shopId,
-            productId: item.productId
-          }).session(dbSession)
-
-          if (!inventory) {
-            inventory = new Inventory({
-              shopId: item.shopId,
-              productId: item.productId,
-              qty: 0
+            return res.status(400).json({
+                status: false,
+                message: 'Tidak ada item yang siap diposting'
             })
-          }
-
-          const currentInventory = Number(inventory.qty || 0)
-          const systemQtyAtCount = Number(item.systemQtyAtCount)
-          const countedQty = Number(item.countedQty)
-
-          /*
-           * Transaksi yang terjadi setelah operator menyimpan counting.
-           */
-          const deltaTransaction =
-            currentInventory - systemQtyAtCount
-
-          /*
-           * Rumus final Stock Opname ZHR.
-           */
-          const newInventoryQty = Math.max(
-            countedQty + deltaTransaction,
-            0
-          )
-
-          const adjustment =
-            newInventoryQty - currentInventory
-
-          inventory.qty = newInventoryQty
-
-          await inventory.save({
-            session: dbSession
-          })
-
-          /*
-           * Hitung total stok produk seluruh lokasi.
-           */
-          
-          const totalStockRows = await Inventory.aggregate([
-            {
-              $match: {
-                productId: item.productId
-              }
-            },
-            {
-              $group: {
-                _id: '$productId',
-                qty: {
-                  $sum: '$qty'
-                }
-              }
-            }
-          ]).session(dbSession)
-
-          const productStock =
-            Number(totalStockRows[0]?.qty || 0)
-
-          const productUpdate = await Product.updateOne(
-            {
-              _id: item.productId
-            },
-            {
-              $set: {
-                stock: productStock
-              }
-            },
-            {
-              session: dbSession
-            }
-          )
-
-          if (!productUpdate.matchedCount) {
-            throw new Error(
-              `Product SKU ${item.sku || item.productId} tidak ditemukan`
-            )
-          }
-
-          /*
-           * Simpan stock card.
-           * Balance adalah total stok seluruh lokasi.
-           */
-
-          await StockCard.create(
-            [
-              {
-                shopId: item.shopId,
-                productId: item.productId,
-
-                documentId: header._id,
-                documentName: 'Stock Opname',
-                document: header.stockOpnameNumber,
-                type: 'STOCK_OPNAME',
-
-                stockIn:
-                  adjustment > 0
-                    ? adjustment
-                    : 0,
-
-                stockOut:
-                  adjustment < 0
-                    ? Math.abs(adjustment)
-                    : 0,
-
-                qtyBefore: currentInventory,
-                qtyAfter: newInventoryQty,
-
-                balance: productStock,
-
-                remarks: 'Stock Opname',
-                userId
-              }
-            ],
-            {
-              session: dbSession
-            }
-          )
-
-          /*
-           * Tandai item sudah diposting.
-           */
-          item.countStatus = 'POSTED'
-          item.postedAt = new Date()
-          item.postedBy = userId
-          item.lastUpdatedAt = new Date()
-          item.lastUpdatedBy = userId
-
-          await item.save({
-            session: dbSession
-          })
-          /*
-           * Tambahkan progress posting header.
-           */
-
-        })
-        posted += 1
-
-      } catch (err) {
-        console.error(
-          `Gagal posting SKU ${sourceItem.sku || sourceItem._id}:`,
-          err
-        )
-
-        failed.push({
-          itemId: sourceItem._id,
-          sku: sourceItem.sku,
-          message: err.message
-        })
-
-      } finally {
-        await dbSession.endSession()
-      }
-    }
-
-    /*
-     * Cek penyelesaian session setelah seluruh batch diproses.
-     */
-    const remain = await StockOpnameItem.countDocuments({
-      stockOpnameId,
-      countStatus: {
-        $in: [
-          'NOT_COUNTED',
-          'COUNTED'
-        ]
-      }
-    })
-
-    let finished = false
-
-    const isRandom = header.type === 'RANDOM'
-
-    if (
-      (isRandom && posted > 0) ||
-      (!isRandom && remain === 0)
-    ) {
-      const now = new Date()
-
-      await StockOpname.updateOne(
-        {
-          _id: stockOpnameId,
-          status: 'COUNTING'
-        },
-        {
-          $set: {
-            status: 'FINISHED',
-            finishedAt: now,
-            postedAt: now,
-            postedBy: userId
-          }
         }
-      )
 
-      finished = true
-    }
+        let posted = 0
+        const failed = []
 
-    if (posted > 0) {
-        await StockOpname.updateOne(
-            {
-                _id: header._id
-            },
-            {
-                $inc: {
-                    postedItems: posted
-                }
+        /*
+         * Setiap item diproses dalam transaction sendiri.
+         */
+        for (const sourceItem of items) {
+
+            const dbSession = await mongoose.startSession()
+
+            try {
+                await dbSession.withTransaction(async () => {
+
+                    /*
+                     * Ambil ulang item di dalam transaction.
+                     * Filter COUNTED mencegah item diposting dua kali.
+                     */
+                    const item = await StockOpnameItem.findOne({
+                        _id: sourceItem._id,
+                        stockOpnameId,
+                        countStatus: 'COUNTED'
+                    }).session(dbSession)
+
+                    if (!item) {
+                        throw new Error(
+                            `Item ${sourceItem.sku || sourceItem._id} sudah diproses atau tidak tersedia`
+                        )
+                    }
+
+                    if (
+                        item.countedQty === null ||
+                        item.countedQty === undefined ||
+                        item.systemQtyAtCount === null ||
+                        item.systemQtyAtCount === undefined
+                    ) {
+                        throw new Error(
+                            `Data counting SKU ${item.sku || item.productId} belum lengkap`
+                        )
+                    }
+
+                    /*
+                     * Ambil inventory terbaru.
+                     */
+                    let inventory = await Inventory.findOne({
+                        shopId: item.shopId,
+                        productId: item.productId
+                    }).session(dbSession)
+
+                    if (!inventory) {
+                        inventory = new Inventory({
+                            shopId: item.shopId,
+                            productId: item.productId,
+                            qty: 0
+                        })
+                    }
+
+                    const currentInventory = Number(inventory.qty || 0)
+                    const systemQtyAtCount = Number(item.systemQtyAtCount)
+                    const countedQty = Number(item.countedQty)
+
+                    /*
+                     * Transaksi yang terjadi setelah operator
+                     * menyimpan hasil counting.
+                     */
+                    const deltaTransaction = currentInventory - systemQtyAtCount
+
+                    /*
+                     * Rumus final Stock Opname ZHR.
+                     */
+                    const newInventoryQty = Math.max(
+                        countedQty + deltaTransaction,
+                        0
+                    )
+
+                    const adjustment = newInventoryQty - currentInventory
+
+                    inventory.qty = newInventoryQty
+
+                    await inventory.save({
+                        session: dbSession
+                    })
+
+                    /*
+                     * Hitung total stok produk seluruh lokasi.
+                     */
+                    const totalStockRows = await Inventory.aggregate([
+                        {
+                            $match: {
+                                productId: item.productId
+                            }
+                        },
+                        {
+                            $group: {
+                                _id: '$productId',
+                                qty: {
+                                    $sum: '$qty'
+                                }
+                            }
+                        }
+                    ]).session(dbSession)
+
+                    const productStock = Number(totalStockRows[0]?.qty || 0)
+
+                    /*
+                     * Sinkronkan total stock pada Product.
+                     */
+                    const productUpdate = await Product.updateOne(
+                        {
+                            _id: item.productId
+                        },
+                        {
+                            $set: {
+                                stock: productStock
+                            }
+                        },
+                        {
+                            session: dbSession
+                        }
+                    )
+
+                    if (!productUpdate.matchedCount) {
+                        throw new Error(
+                            `Product SKU ${item.sku || item.productId} tidak ditemukan`
+                        )
+                    }
+
+                    /*
+                     * Simpan stock card.
+                     *
+                     * qtyBefore / qtyAfter = stok toko tersebut.
+                     * balance = total stok seluruh lokasi.
+                     */
+                    await StockCard.create(
+                        [
+                            {
+                                shopId: item.shopId,
+                                productId: item.productId,
+
+                                documentId: header._id,
+                                documentName: 'Stock Opname',
+                                document: header.stockOpnameNumber,
+                                type: 'STOCK_OPNAME',
+
+                                stockIn: adjustment > 0 ? adjustment : 0,
+                                stockOut: adjustment < 0 ? Math.abs(adjustment) : 0,
+
+                                qtyBefore: currentInventory,
+                                qtyAfter: newInventoryQty,
+
+                                balance: productStock,
+
+                                remarks: 'Stock Opname',
+                                userId
+                            }
+                        ],
+                        {
+                            session: dbSession
+                        }
+                    )
+
+                    /*
+                     * Tandai item sudah diposting.
+                     */
+                    const now = new Date()
+
+                    item.countStatus = 'POSTED'
+                    item.postedAt = now
+                    item.postedBy = userId
+                    item.lastUpdatedAt = now
+                    item.lastUpdatedBy = userId
+
+                    await item.save({
+                        session: dbSession
+                    })
+                })
+
+                posted += 1
+
+            } catch (err) {
+                console.error(
+                    `Gagal posting SKU ${sourceItem.sku || sourceItem._id}:`,
+                    err
+                )
+
+                failed.push({
+                    itemId: sourceItem._id,
+                    sku: sourceItem.sku,
+                    message: err.message
+                })
+
+            } finally {
+                await dbSession.endSession()
             }
-        )
+        }
+
+        /*
+         * Update jumlah item yang berhasil diposting.
+         */
+        if (posted > 0) {
+            await StockOpname.updateOne(
+                {
+                    _id: stockOpnameId
+                },
+                {
+                    $inc: {
+                        postedItems: posted
+                    }
+                }
+            )
+        }
+
+        /*
+         * Hitung item tersisa.
+         *
+         * Nilai ini hanya menentukan penyelesaian
+         * Stock Opname REGULAR.
+         */
+        const remain = await StockOpnameItem.countDocuments({
+            stockOpnameId,
+            countStatus: {
+                $in: ['NOT_COUNTED', 'COUNTED']
+            }
+        })
+
+        /*
+         * RANDOM:
+         * langsung selesai setelah proses postBatch dijalankan,
+         * tidak peduli:
+         * - ada item gagal
+         * - posted = 0
+         * - masih ada NOT_COUNTED
+         * - masih ada COUNTED
+         *
+         * REGULAR:
+         * selesai hanya ketika semua item sudah selesai.
+         */
+        const shouldFinish = isRandom || remain === 0
+
+        let finished = false
+
+        if (shouldFinish) {
+            const now = new Date()
+
+            const finishResult = await StockOpname.updateOne(
+                {
+                    _id: stockOpnameId,
+                    status: 'COUNTING'
+                },
+                {
+                    $set: {
+                        status: 'FINISHED',
+                        finishedAt: now,
+                        postedAt: now,
+                        postedBy: userId
+                    }
+                }
+            )
+
+            finished = finishResult.modifiedCount > 0
+        }
+
+        return res.status(200).json({
+            status: failed.length === 0,
+            message:
+                failed.length === 0
+                    ? `${posted} item berhasil diposting`
+                    : `${posted} item berhasil dan ${failed.length} item gagal diposting`,
+            totalReady: items.length,
+            posted,
+            failedCount: failed.length,
+            failed,
+            remain,
+            finished
+        })
+
+    } catch (err) {
+        console.error('postBatch error:', err)
+
+        return res.status(500).json({
+            status: false,
+            message: err.message
+        })
     }
-
-    return res.status(200).json({
-      status: failed.length === 0,
-      message:
-        failed.length === 0
-          ? `${posted} item berhasil diposting`
-          : `${posted} item berhasil dan ${failed.length} item gagal diposting`,
-      totalReady: items.length,
-      posted,
-      failedCount: failed.length,
-      failed,
-      remain,
-      finished
-    })
-
-  } catch (err) {
-    console.error('postBatch error:', err)
-
-    return res.status(500).json({
-      status: false,
-      message: err.message
-    })
-  }
 }
 
 
