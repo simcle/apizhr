@@ -5,221 +5,338 @@ const SalesDaily = require('../models/SalesDaily')
 const DeadStockGlobalDaily = require('../models/DeadStockGlobalDaily')
 
 function daysBetweenWIB(dateA, dateB) {
-  const a = new Date(`${dateA}T00:00:00+07:00`)
-  const b = new Date(`${dateB}T00:00:00+07:00`)
-  return Math.floor((a - b) / (1000 * 60 * 60 * 24))
+    const a = new Date(`${dateA}T00:00:00+07:00`)
+    const b = new Date(`${dateB}T00:00:00+07:00`)
+
+    return Math.max(
+        Math.floor((a - b) / (1000 * 60 * 60 * 24)),
+        0
+    )
+}
+
+function dateToWIBString(date) {
+    if (!date) return null
+
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date(date))
 }
 
 function getDeadLevel({ daysNoSale, totalStock, totalStockValue }) {
-  if (daysNoSale >= 365 && totalStock > 0) {
-    return {
-      level: 'CRITICAL',
-      action: 'CLEARANCE',
-      message: 'Tidak terjual di seluruh toko lebih dari 1 tahun'
+    if (daysNoSale >= 365 && totalStock > 0) {
+        return {
+            level: 'CRITICAL',
+            action: 'CLEARANCE',
+            message: 'Tidak terjual di seluruh toko lebih dari 1 tahun'
+        }
     }
-  }
 
-  if (daysNoSale >= 180 && totalStock >= 10 && totalStockValue >= 2000000) {
-    return {
-      level: 'SERIOUS',
-      action: 'DISCOUNT',
-      message: 'Stok global besar dan tidak bergerak lebih dari 180 hari'
+    if (daysNoSale >= 180 && totalStock >= 10 && totalStockValue >= 2000000) {
+        return {
+            level: 'SERIOUS',
+            action: 'DISCOUNT',
+            message: 'Stok global besar dan tidak bergerak lebih dari 180 hari'
+        }
     }
-  }
 
-  if (daysNoSale >= 90 && totalStock >= 5 && totalStockValue >= 500000) {
-    return {
-      level: 'WARNING',
-      action: 'PROMO',
-      message: 'Mulai lambat secara global lebih dari 90 hari'
+    if (daysNoSale >= 90 && totalStock >= 5 && totalStockValue >= 500000) {
+        return {
+            level: 'WARNING',
+            action: 'PROMO',
+            message: 'Mulai lambat secara global lebih dari 90 hari'
+        }
     }
-  }
 
-  return null
+    return null
 }
 
 async function buildDeadStockGlobalDailyForDate(dateStr) {
-  const rows = await InventoryIntelDaily.aggregate([
-    {
-      $match: {
-        date: dateStr,
-        stockOnHand: { $gt: 0 }
-      }
-    },
-    {
-      $lookup: {
-        from: 'shops',
-        localField: 'shopId',
-        foreignField: '_id',
-        as: 'shop'
-      }
-    },
-    { $unwind: '$shop' },
-    {
-      $match: {
-        'shop.type': { $in: ['STORE', 'ONLINE'] }
-      }
-    },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'productId',
-        foreignField: '_id',
-        as: 'product'
-      }
-    },
-    { $unwind: '$product' },
-    {
-      $lookup: {
-        from: 'categories',
-        localField: 'product.categoryId',
-        foreignField: '_id',
-        as: 'category'
-      }
-    },
-    {
-      $unwind: {
-        path: '$category',
-        preserveNullAndEmptyArrays: true
-      }
-    },
-    {
-      $group: {
-        _id: '$productId',
-        product: { $first: '$product' },
-        category: { $first: '$category' },
-        totalStock: { $sum: '$stockOnHand' },
-        totalAds: { $sum: '$ads' },
-        shopCount: { $sum: 1 }
-      }
-    }
-  ]).allowDiskUse(true)
-
-  if (!rows.length) {
-    await DeadStockGlobalDaily.deleteMany({ date: dateStr })
-    return { upserted: 0, removed: true }
-  }
-
-  const productIds = rows.map(row => row._id)
-
-  const lastSales = await SalesDaily.aggregate([
-    {
-      $match: {
-        productId: { $in: productIds }
-      }
-    },
-    {
-      $group: {
-        _id: '$productId',
-        lastSoldDate: { $max: '$date' },
-        lifetimeQtySold: { $sum: '$qtySold' }
-      }
-    }
-  ]).allowDiskUse(true)
-
-  const salesMap = new Map()
-
-  lastSales.forEach(row => {
-    salesMap.set(String(row._id), {
-      lastSoldDate: row.lastSoldDate,
-      lifetimeQtySold: row.lifetimeQtySold
-    })
-  })
-
-  const ops = []
-  const validKeys = new Set()
-
-  for (const row of rows) {
-    const product = row.product
-    if (!product?._id) continue
-
-    const salesInfo = salesMap.get(String(row._id))
-
-    const lastSoldDate = salesInfo?.lastSoldDate || null
-    const lifetimeQtySold = salesInfo?.lifetimeQtySold || 0
-
-    const daysNoSale = lastSoldDate
-      ? daysBetweenWIB(dateStr, lastSoldDate)
-      : 9999
-
-    const unitCost = product.purchase || product.price || 0
-    const totalStockValue = row.totalStock * unitCost
-
-    const dead = getDeadLevel({
-      daysNoSale,
-      totalStock: row.totalStock,
-      totalStockValue
-    })
-
-    if (!dead) continue
-
-    const parentId = product.parentId || product._id
-
-    const doc = {
-      date: dateStr,
-
-      productId: product._id,
-      parentId,
-
-      categoryId: product.categoryId || null,
-      categoryName: row.category?.name || null,
-
-      sku: product.sku,
-      name: product.name,
-
-      totalStock: row.totalStock,
-      totalStockValue,
-
-      totalAds: row.totalAds,
-      avgAds: row.shopCount > 0
-        ? Number((row.totalAds / row.shopCount).toFixed(4))
-        : 0,
-
-      lastSoldDate,
-      daysNoSale,
-      lifetimeQtySold,
-
-      shopCount: row.shopCount,
-
-      deadLevel: dead.level,
-      recommendedAction: dead.action,
-      message: dead.message
-    }
-
-    validKeys.add(`${dateStr}_${product._id}`)
-
-    ops.push({
-      updateOne: {
-        filter: {
-          date: dateStr,
-          productId: product._id
+    const rows = await InventoryIntelDaily.aggregate([
+        {
+            $match: {
+                date: dateStr,
+                stockOnHand: { $gt: 0 }
+            }
         },
-        update: { $set: doc },
-        upsert: true
-      }
-    })
-  }
+        {
+            $lookup: {
+                from: 'shops',
+                localField: 'shopId',
+                foreignField: '_id',
+                as: 'shop'
+            }
+        },
+        { $unwind: '$shop' },
+        {
+            $match: {
+                'shop.type': { $in: ['STORE', 'ONLINE'] }
+            }
+        },
+        {
+            $lookup: {
+                from: 'products',
+                localField: 'productId',
+                foreignField: '_id',
+                as: 'product'
+            }
+        },
+        { $unwind: '$product' },
+        {
+            $lookup: {
+                from: 'categories',
+                localField: 'product.categoryId',
+                foreignField: '_id',
+                as: 'category'
+            }
+        },
+        {
+            $unwind: {
+                path: '$category',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $group: {
+                _id: '$productId',
+                product: { $first: '$product' },
+                category: { $first: '$category' },
+                totalStock: { $sum: '$stockOnHand' },
+                totalAds: { $sum: '$ads' },
+                shopCount: { $sum: 1 }
+            }
+        }
+    ]).allowDiskUse(true)
 
-  if (ops.length) {
-    await DeadStockGlobalDaily.bulkWrite(ops, { ordered: false })
-  }
+    if (!rows.length) {
+        await DeadStockGlobalDaily.deleteMany({ date: dateStr })
 
-  const currentRows = await DeadStockGlobalDaily.find({ date: dateStr })
-    .select('productId')
-    .lean()
+        return {
+            upserted: 0,
+            removed: 0,
+            deleted: true
+        }
+    }
 
-  const deleteIds = currentRows
-    .filter(row => !validKeys.has(`${dateStr}_${row.productId}`))
-    .map(row => row._id)
+    const productIds = rows.map(row => row._id)
 
-  if (deleteIds.length) {
-    await DeadStockGlobalDaily.deleteMany({ _id: { $in: deleteIds } })
-  }
+    /*
+     * Ambil histori penjualan global sampai tanggal snapshot.
+     *
+     * date <= dateStr penting supaya rebuild snapshot tanggal lama
+     * tidak menggunakan penjualan yang terjadi setelah snapshot.
+     */
+    const lastSales = await SalesDaily.aggregate([
+        {
+            $match: {
+                productId: { $in: productIds },
+                date: { $lte: dateStr }
+            }
+        },
+        {
+            $group: {
+                _id: '$productId',
+                lastSoldDate: { $max: '$date' },
+                lifetimeQtySold: { $sum: '$qtySold' }
+            }
+        }
+    ]).allowDiskUse(true)
 
-  return {
-    upserted: ops.length,
-    removed: deleteIds.length
-  }
+    const salesMap = new Map()
+
+    for (const row of lastSales) {
+        salesMap.set(
+            String(row._id),
+            {
+                lastSoldDate: row.lastSoldDate,
+                lifetimeQtySold: row.lifetimeQtySold
+            }
+        )
+    }
+
+    const ops = []
+    const validKeys = new Set()
+
+    let usingLastSoldDate = 0
+    let usingProductCreatedAt = 0
+    let usingLegacyFallback = 0
+
+    for (const row of rows) {
+        const product = row.product
+
+        if (!product?._id) continue
+
+        const salesInfo = salesMap.get(
+            String(row._id)
+        )
+
+        const lastSoldDate =
+            salesInfo?.lastSoldDate ||
+            null
+
+        const lifetimeQtySold =
+            salesInfo?.lifetimeQtySold ||
+            0
+
+        /*
+         * PENENTUAN UMUR DEAD STOCK GLOBAL
+         *
+         * Jika produk pernah terjual:
+         *     gunakan lastSoldDate global.
+         *
+         * Jika belum pernah terjual:
+         *     gunakan umur produk berdasarkan Product.createdAt.
+         *
+         * Ini mencegah produk baru yang baru dibuat beberapa hari
+         * langsung dianggap 9999 hari dan masuk CRITICAL.
+         */
+        let referenceDate = null
+
+        if (lastSoldDate) {
+            referenceDate = lastSoldDate
+            usingLastSoldDate++
+        } else if (product.createdAt) {
+            referenceDate = dateToWIBString(
+                product.createdAt
+            )
+
+            usingProductCreatedAt++
+        }
+
+        /*
+         * Fallback lama tetap dipertahankan hanya untuk data legacy
+         * yang benar-benar tidak mempunyai SalesDaily maupun createdAt.
+         */
+        let daysNoSale
+
+        if (referenceDate) {
+            daysNoSale = daysBetweenWIB(
+                dateStr,
+                referenceDate
+            )
+        } else {
+            daysNoSale = 9999
+            usingLegacyFallback++
+        }
+
+        const unitCost =
+            product.purchase ||
+            product.price ||
+            0
+
+        const totalStockValue =
+            row.totalStock * unitCost
+
+        const dead = getDeadLevel({
+            daysNoSale,
+            totalStock: row.totalStock,
+            totalStockValue
+        })
+
+        if (!dead) continue
+
+        const parentId =
+            product.parentId ||
+            product._id
+
+        const doc = {
+            date: dateStr,
+
+            productId: product._id,
+            parentId,
+
+            categoryId: product.categoryId || null,
+            categoryName: row.category?.name || null,
+
+            sku: product.sku,
+            name: product.name,
+
+            totalStock: row.totalStock,
+            totalStockValue,
+
+            totalAds: row.totalAds,
+
+            avgAds: row.shopCount > 0
+                ? Number(
+                    (
+                        row.totalAds /
+                        row.shopCount
+                    ).toFixed(4)
+                )
+                : 0,
+
+            lastSoldDate,
+            daysNoSale,
+            lifetimeQtySold,
+
+            shopCount: row.shopCount,
+
+            deadLevel: dead.level,
+            recommendedAction: dead.action,
+            message: dead.message
+        }
+
+        validKeys.add(
+            `${dateStr}_${product._id}`
+        )
+
+        ops.push({
+            updateOne: {
+                filter: {
+                    date: dateStr,
+                    productId: product._id
+                },
+                update: {
+                    $set: doc
+                },
+                upsert: true
+            }
+        })
+    }
+
+    if (ops.length) {
+        await DeadStockGlobalDaily.bulkWrite(
+            ops,
+            { ordered: false }
+        )
+    }
+
+    /*
+     * Cleanup record snapshot lama yang setelah rebuild
+     * sudah tidak memenuhi kriteria dead stock.
+     */
+    const currentRows = await DeadStockGlobalDaily
+        .find({ date: dateStr })
+        .select('productId')
+        .lean()
+
+    const deleteIds = currentRows
+        .filter(row => {
+            return !validKeys.has(
+                `${dateStr}_${row.productId}`
+            )
+        })
+        .map(row => row._id)
+
+    if (deleteIds.length) {
+        await DeadStockGlobalDaily.deleteMany({
+            _id: {
+                $in: deleteIds
+            }
+        })
+    }
+
+    return {
+        upserted: ops.length,
+        removed: deleteIds.length,
+        usingLastSoldDate,
+        usingProductCreatedAt,
+        usingLegacyFallback
+    }
 }
 
-module.exports = { buildDeadStockGlobalDailyForDate }
+module.exports = {
+    buildDeadStockGlobalDailyForDate
+}

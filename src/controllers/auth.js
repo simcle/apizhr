@@ -97,7 +97,7 @@ exports.UserLogin = (req, res) => {
                 return res.status(400).send('Akun tidak ditemukan');
             }
             if( await bcrypt.compare(password, result.password)) {
-                const user = {_id: result._id, shopId: result.employmentData.shopId}
+                const user = {_id: result._id, role: result.role, shopId: result.employmentData.shopId}
                 const accessToken = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {expiresIn: tokenExpired})
                 const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET)
                 const data = {

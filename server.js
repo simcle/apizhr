@@ -72,8 +72,29 @@ const reportSalesRouter = require('./src/routers/reportSales')
 const deadStockAssetRoutes = require('./src/routers/deadStockAsset')
 const stocOrderRouter = require('./src/routers/stockOrder')
 
+
 const storeExpenseCategoryRoter = require('./src/routers/storeExpenseCategory')
 const storeOperationalCashRoutes = require('./src/routers/storeOperationalCash')
+
+const supervisorStockOpnameRoutes = require('./src/routers/supervisor/stockOpname.routes')
+const supervisorShopRoutes = require('./src/routers/supervisor/shop.routes')
+const supervisorDeadStockRoute = require('./src/routers/supervisor/deadStock.route')
+const dailyCheclistRoute = require('./src/routers/supervisor/dailyChecklist.route')
+const checklistTemplateItemRoute = require('./src/routers/supervisor/checklistTemplate.route')
+
+app.use(
+    '/api/supervisor/dead-stock',
+    supervisorDeadStockRoute
+)
+
+app.use('/api/auth', userRoutes);
+
+// SUPERVISOR
+app.use('/api/supervisor/stock-opnames',  supervisorStockOpnameRoutes)
+app.use('/api/supervisor/shops', supervisorShopRoutes)
+app.use('/api/supervisor/dead-stock', supervisorDeadStockRoute)
+app.use('/api/supervisor/daily-checklist', dailyCheclistRoute)
+app.use('/api/supervisor/checklist-template-items', checklistTemplateItemRoute)
 
 app.use('/api/store-expense-categories', authenticateToken, storeExpenseCategoryRoter)
 app.use('/api/store-operational-cash', authenticateToken, storeOperationalCashRoutes)

@@ -1073,7 +1073,7 @@ exports.postBatch = async (req, res) => {
             })
         }
 
-        const isRandom = header.type === 'RANDOM'
+        const isRandom = header.opnameType === 'RANDOM'
 
         const items = await StockOpnameItem.find({
             stockOpnameId,
