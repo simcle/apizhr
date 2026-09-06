@@ -5,12 +5,56 @@ const ChecklistTemplateItem = require('../../models/checklistTemplateItem')
 const DailyChecklist = require('../../models/dailyChecklist')
 const DailyChecklistItem = require('../../models/dailyChecklistItem')
 
+const { s } = require('./checklistIssue.service')
 
 function createError(message, statusCode = 400) {
     const error = new Error(message)
     error.statusCode = statusCode
 
     return error
+}
+
+function getDateString(value = null) {
+    if (value) {
+        const date = String(value)
+
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            const error = new Error('Format tanggal tidak valid')
+            error.statusCode = 400
+            throw error
+        }
+
+        return date
+    }
+
+    const now = new Date()
+
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(now)
+}
+
+function getTodayString() {
+    return getDateString()
+}
+
+function resolveVisitStatus(visit, date) {
+    if (visit?.status === 'COMPLETED') {
+        return 'COMPLETED'
+    }
+
+    if (visit) {
+        return 'IN_PROGRESS'
+    }
+
+    if (date < getTodayString()) {
+        return 'MISSED'
+    }
+
+    return 'NOT_VISITED'
 }
 
 
@@ -930,6 +974,23 @@ async function completeChecklist({
             )
         }).length
 
+    
+    const issueItems =
+        items.filter(item => {
+            return (
+                item.result ===
+                'ISSUE'
+            )
+        })
+
+    for (const item of issueItems) {
+        await registerChecklistIssue({
+            checklist,
+            item,
+            userId
+        })
+    }
+    
     checklist.status =
         'COMPLETED'
 
