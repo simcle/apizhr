@@ -5,56 +5,16 @@ const ChecklistTemplateItem = require('../../models/checklistTemplateItem')
 const DailyChecklist = require('../../models/dailyChecklist')
 const DailyChecklistItem = require('../../models/dailyChecklistItem')
 
-const { s } = require('./checklistIssue.service')
+const {
+    registerChecklistIssue
+} = require('./checklistIssue.service')
+
 
 function createError(message, statusCode = 400) {
     const error = new Error(message)
     error.statusCode = statusCode
 
     return error
-}
-
-function getDateString(value = null) {
-    if (value) {
-        const date = String(value)
-
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-            const error = new Error('Format tanggal tidak valid')
-            error.statusCode = 400
-            throw error
-        }
-
-        return date
-    }
-
-    const now = new Date()
-
-    return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Jakarta',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-    }).format(now)
-}
-
-function getTodayString() {
-    return getDateString()
-}
-
-function resolveVisitStatus(visit, date) {
-    if (visit?.status === 'COMPLETED') {
-        return 'COMPLETED'
-    }
-
-    if (visit) {
-        return 'IN_PROGRESS'
-    }
-
-    if (date < getTodayString()) {
-        return 'MISSED'
-    }
-
-    return 'NOT_VISITED'
 }
 
 
@@ -79,6 +39,42 @@ function validateDate(date) {
     }
 
     return value
+}
+
+
+function getDateDaysAgo(days) {
+    const date = new Date()
+
+    date.setDate(
+        date.getDate() - days
+    )
+
+    return getDateWIB(date)
+}
+
+
+function resolveHistoryStatus(checklist, today) {
+    if (
+        checklist.status ===
+        'COMPLETED'
+    ) {
+        return 'COMPLETED'
+    }
+
+    if (
+        checklist.date < today
+    ) {
+        return 'MISSED'
+    }
+
+    if (
+        checklist.status ===
+        'IN_PROGRESS'
+    ) {
+        return 'IN_PROGRESS'
+    }
+
+    return 'NOT_VISITED'
 }
 
 
@@ -134,7 +130,9 @@ async function createChecklistItems(
             item.description || '',
 
         sortOrder:
-            Number(item.sortOrder || 0),
+            Number(
+                item.sortOrder || 0
+            ),
 
         issueNoteRequired:
             item.issueNoteRequired !== false,
@@ -157,11 +155,6 @@ async function createChecklistItems(
             }
         )
     } catch (error) {
-        /*
-         * Jika terjadi race condition dari request bersamaan,
-         * unique index dailyChecklistId + templateItemId
-         * tetap melindungi duplicate.
-         */
         if (error.code !== 11000) {
             throw error
         }
@@ -206,14 +199,13 @@ async function ensureChecklistItems(
     }
 
     /*
-     * Template baru hanya ditambahkan jika checklist
-     * belum selesai.
-     *
-     * Checklist COMPLETED adalah historical snapshot
-     * dan tidak boleh ikut berubah ketika master berubah.
+     * Checklist yang sudah selesai merupakan
+     * historical snapshot dan tidak ikut berubah
+     * ketika master checklist berubah.
      */
     if (
-        checklist.status === 'COMPLETED'
+        checklist.status ===
+        'COMPLETED'
     ) {
         return
     }
@@ -376,19 +368,20 @@ async function getDailyOverview({
         dateStr
     )
 
-    const rows = await DailyChecklist
-        .find({
-            date:
-                dateStr
-        })
-        .sort({
-            shopName: 1
-        })
-        .populate(
-            'supervisorId',
-            'name role'
-        )
-        .lean()
+    const rows =
+        await DailyChecklist
+            .find({
+                date:
+                    dateStr
+            })
+            .sort({
+                shopName: 1
+            })
+            .populate(
+                'supervisorId',
+                'name role'
+            )
+            .lean()
 
     const totalStores =
         rows.length
@@ -499,6 +492,315 @@ async function getDailyOverview({
                 completedAt:
                     item.completedAt
             }))
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| HISTORY
+|--------------------------------------------------------------------------
+|
+| Tidak membuat checklist baru.
+| Hanya membaca DailyChecklist yang memang sudah tercatat.
+|
+| Hari ini:
+| PENDING      -> NOT_VISITED
+| IN_PROGRESS  -> IN_PROGRESS
+| COMPLETED    -> COMPLETED
+|
+| Tanggal lampau:
+| PENDING      -> MISSED
+| IN_PROGRESS  -> MISSED
+| COMPLETED    -> COMPLETED
+|
+*/
+
+async function getHistory({
+    startDate = null,
+    endDate = null,
+    shopId = null
+} = {}) {
+    const today =
+        getDateWIB()
+
+    const startDateStr =
+        startDate
+            ? validateDate(startDate)
+            : getDateDaysAgo(6)
+
+    const endDateStr =
+        endDate
+            ? validateDate(endDate)
+            : today
+
+    if (
+        startDateStr >
+        endDateStr
+    ) {
+        throw createError(
+            'Tanggal awal tidak boleh lebih besar dari tanggal akhir',
+            400
+        )
+    }
+
+    if (
+        endDateStr >
+        today
+    ) {
+        throw createError(
+            'Tanggal akhir tidak boleh melebihi hari ini',
+            400
+        )
+    }
+
+    const match = {
+        date: {
+            $gte:
+                startDateStr,
+
+            $lte:
+                endDateStr
+        }
+    }
+
+    let shop = null
+
+    if (shopId) {
+        shop =
+            await getStore(
+                shopId
+            )
+
+        match.shopId =
+            shop._id
+    }
+
+    const rows =
+        await DailyChecklist
+            .find(match)
+            .sort({
+                date: -1,
+                shopName: 1
+            })
+            .populate(
+                'supervisorId',
+                'name role'
+            )
+            .lean()
+
+    const dateMap =
+        new Map()
+
+    let totalExpected = 0
+    let totalCompleted = 0
+    let totalMissed = 0
+    let totalInProgress = 0
+    let totalNotVisited = 0
+    let totalIssues = 0
+
+    for (const item of rows) {
+        const visitStatus =
+            resolveHistoryStatus(
+                item,
+                today
+            )
+
+        if (
+            !dateMap.has(
+                item.date
+            )
+        ) {
+            dateMap.set(
+                item.date,
+                {
+                    date:
+                        item.date,
+
+                    totalStores:
+                        0,
+
+                    completed:
+                        0,
+
+                    missed:
+                        0,
+
+                    inProgress:
+                        0,
+
+                    notVisited:
+                        0,
+
+                    totalIssues:
+                        0,
+
+                    completionRate:
+                        0,
+
+                    shops:
+                        []
+                }
+            )
+        }
+
+        const dateRow =
+            dateMap.get(
+                item.date
+            )
+
+        dateRow.totalStores++
+        totalExpected++
+
+        if (
+            visitStatus ===
+            'COMPLETED'
+        ) {
+            dateRow.completed++
+            totalCompleted++
+        }
+
+        if (
+            visitStatus ===
+            'MISSED'
+        ) {
+            dateRow.missed++
+            totalMissed++
+        }
+
+        if (
+            visitStatus ===
+            'IN_PROGRESS'
+        ) {
+            dateRow.inProgress++
+            totalInProgress++
+        }
+
+        if (
+            visitStatus ===
+            'NOT_VISITED'
+        ) {
+            dateRow.notVisited++
+            totalNotVisited++
+        }
+
+        const issueCount =
+            Number(
+                item.totalIssue || 0
+            )
+
+        dateRow.totalIssues +=
+            issueCount
+
+        totalIssues +=
+            issueCount
+
+        dateRow.shops.push({
+            _id:
+                item._id,
+
+            date:
+                item.date,
+
+            shopId:
+                item.shopId,
+
+            shopName:
+                item.shopName,
+
+            checklistStatus:
+                item.status,
+
+            visitStatus,
+
+            totalItems:
+                Number(
+                    item.totalItems || 0
+                ),
+
+            totalOk:
+                Number(
+                    item.totalOk || 0
+                ),
+
+            totalIssue:
+                issueCount,
+
+            totalNA:
+                Number(
+                    item.totalNA || 0
+                ),
+
+            supervisor:
+                item.supervisorId || null,
+
+            startedAt:
+                item.startedAt,
+
+            completedAt:
+                item.completedAt,
+
+            notes:
+                item.notes || ''
+        })
+    }
+
+    const dates =
+        Array.from(
+            dateMap.values()
+        ).map(item => {
+            item.completionRate =
+                item.totalStores
+                    ? Math.round(
+                        item.completed /
+                        item.totalStores *
+                        100
+                    )
+                    : 0
+
+            return item
+        })
+
+    const completionRate =
+        totalExpected
+            ? Math.round(
+                totalCompleted /
+                totalExpected *
+                100
+            )
+            : 0
+
+    return {
+        period: {
+            startDate:
+                startDateStr,
+
+            endDate:
+                endDateStr
+        },
+
+        shop,
+
+        summary: {
+            totalExpected,
+            completed:
+                totalCompleted,
+
+            missed:
+                totalMissed,
+
+            inProgress:
+                totalInProgress,
+
+            notVisited:
+                totalNotVisited,
+
+            totalIssues,
+
+            completionRate
+        },
+
+        dates
     }
 }
 
@@ -832,10 +1134,6 @@ async function updateChecklistItem({
 
     await item.save()
 
-    /*
-     * Jika ini item pertama yang diisi,
-     * otomatis mulai checklist.
-     */
     if (
         checklist.status ===
         'PENDING'
@@ -974,7 +1272,6 @@ async function completeChecklist({
             )
         }).length
 
-    
     const issueItems =
         items.filter(item => {
             return (
@@ -990,7 +1287,7 @@ async function completeChecklist({
             userId
         })
     }
-    
+
     checklist.status =
         'COMPLETED'
 
@@ -1075,6 +1372,7 @@ module.exports = {
     getDateWIB,
     ensureDailyChecklists,
     getDailyOverview,
+    getHistory,
     getChecklistDetail,
     getChecklistByShopAndDate,
     startChecklist,

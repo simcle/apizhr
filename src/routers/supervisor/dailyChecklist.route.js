@@ -38,6 +38,10 @@ router.get(
     controller.getByShop
 )
 
+router.get(
+    '/history',
+    controller.getHistory
+)
 
 /*
 |--------------------------------------------------------------------------

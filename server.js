@@ -82,6 +82,9 @@ const supervisorDeadStockRoute = require('./src/routers/supervisor/deadStock.rou
 const dailyCheclistRoute = require('./src/routers/supervisor/dailyChecklist.route')
 const checklistTemplateItemRoute = require('./src/routers/supervisor/checklistTemplate.route')
 const checklistIssueRoute = require('./src/routers/supervisor/checklistIssue.route')
+const supervisorInvetoryRoute = require('./src/routers/supervisor/inventory.route')
+const supervisorCashRoute = require('./src/routers/supervisor/cash.route')
+
 app.use(
     '/api/supervisor/dead-stock',
     supervisorDeadStockRoute
@@ -96,6 +99,8 @@ app.use('/api/supervisor/dead-stock', supervisorDeadStockRoute)
 app.use('/api/supervisor/daily-checklist', dailyCheclistRoute)
 app.use('/api/supervisor/checklist-template-items', checklistTemplateItemRoute)
 app.use('/api/supervisor/checklist-issues', checklistIssueRoute)
+app.use('/api/supervisor/inventory', supervisorInvetoryRoute)
+app.use('/api/supervisor/cash', supervisorCashRoute)
 
 app.use('/api/store-expense-categories', authenticateToken, storeExpenseCategoryRoter)
 app.use('/api/store-operational-cash', authenticateToken, storeOperationalCashRoutes)

@@ -1,5 +1,6 @@
 const {
     getDailyOverview,
+    getHistory,
     getChecklistDetail,
     getChecklistByShopAndDate,
     startChecklist,
@@ -220,4 +221,22 @@ exports.complete = async (req, res) => {
     }
 }
 
+exports.getHistory = async (req, res) => {
+    try {
+        const result = await getHistory({
+            startDate: req.query.startDate || null,
+            endDate: req.query.endDate || null,
+            shopId: req.query.shopId || null
+        })
 
+        return res.status(200).json({
+            status: true,
+            data: result
+        })
+    } catch (error) {
+        return handleError(
+            res,
+            error
+        )
+    }
+}
