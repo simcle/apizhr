@@ -173,7 +173,7 @@ app.use('/setor', authenticateToken, setorRouter)
 app.use('/stock-order', stocOrderRouter)
 app.use('/report-absensi', reportAbsensiRouter)
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 mongoose.set("strictQuery", false);
 mongoose.connect(process.env.DATA_BASE, {
     autoIndex: true
