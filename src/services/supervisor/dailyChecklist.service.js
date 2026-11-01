@@ -598,6 +598,8 @@ async function getHistory({
     let totalInProgress = 0
     let totalNotVisited = 0
     let totalIssues = 0
+    let totalItems = 0
+    let totalOk = 0
 
     for (const item of rows) {
         const visitStatus =
@@ -695,6 +697,21 @@ async function getHistory({
         totalIssues +=
             issueCount
 
+        if (
+            visitStatus ===
+            'COMPLETED'
+        ) {
+            totalItems +=
+                Number(
+                    item.totalItems || 0
+                )
+
+            totalOk +=
+                Number(
+                    item.totalOk || 0
+                )
+        }
+
         dateRow.shops.push({
             _id:
                 item._id,
@@ -770,6 +787,21 @@ async function getHistory({
             )
             : 0
 
+    const evaluatedItems =
+        totalOk +
+        totalIssues
+
+    const complianceRate =
+        evaluatedItems
+            ? Number(
+                (
+                    totalOk /
+                    evaluatedItems *
+                    100
+                ).toFixed(2)
+            )
+            : 0
+
     return {
         period: {
             startDate:
@@ -795,9 +827,12 @@ async function getHistory({
             notVisited:
                 totalNotVisited,
 
+            totalItems,
+            totalOk,
             totalIssues,
 
-            completionRate
+            completionRate,
+            complianceRate
         },
 
         dates

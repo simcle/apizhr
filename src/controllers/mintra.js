@@ -9,6 +9,7 @@ const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
 const mitraInventoryModule = require('../modules/mitraInventory');
 const MitraHistoryModel = require('../models/mitraHistory');
+const BankModel = require('../models/banks');
 
 exports.getHistory = (req, res) => {
     const currentPage = req.query.page || 1
@@ -229,54 +230,226 @@ exports.getSales = (req, res) => {
 }
 
 exports.mitraPayment = async (req, res) => {
-    const userId = req.user._id
-    const shopId = req.user.shopId
-    const mitraId = req.body.mitraId
-    const items = req.body.items
-    const grandTotal = req.body.grandTotal
-    const date = new Date();
-    let dd = date.getDate();
-    let mm = date.getMonth() +1;
-    let yy = date.getFullYear().toString().substring(2);
-    dd = checkTime(dd);
-    mm = checkTime(mm)
-    function checkTime (i) {
-        if(i < 10) {
-            i = `0${i}`
-        }
-        return i
-    }
-    let today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    let payment = await MitraPaymentModel.findOne({createdAt: {$gte: today}}).sort({createdAt: -1})
-    let paymentNo;
-    if(payment) {
-        const no = payment.paymentNo.substring(16)
-        const newNo = parseInt(no)+1
-        paymentNo = `${dd}${mm}/MTR/BYR/${yy}/${newNo}`
-    } else {
-        paymentNo = `${dd}${mm}/MTR/BYR/${yy}/1`
-    }
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i]
-        await MitraSalesModel.updateOne({_id: item._id}, {status: 'LUNAS'})
-    }
+    try {
+        const userId = req.user._id
+        const shopId = req.user.shopId
+        const mitraId = req.body.mitraId
+        const paymentMethod = req.body.paymentMethod
+        const bankId = req.body.bankId || null
+        const cash = Number(req.body.cash || 0)
 
-    const mitraPayment = new MitraPaymentModel({
-        paymentNo: paymentNo,
-        mitraId: mitraId,
-        items: items,
-        userId: userId
-    })
-    await mitraPayment.save();
-    const mitraHistory = new MitraHistoryModel({
-        documentNo: paymentNo,
-        type: 'Bayar',
-        mitraId: mitraId,
-        shopId: shopId,
-        items: items,
-        grandTotal: grandTotal,
-        userId: userId
-    })
-    await mitraHistory.save()
-    res.status(200).json('OK')
+        const allowedPaymentMethods = [
+            'TUNAI',
+            'DEBIT / CREDIT',
+            'TRANSFER BANK',
+            'MULTI BAYAR'
+        ]
+
+        if(!mongoose.Types.ObjectId.isValid(mitraId)) {
+            return res.status(400).json({
+                message: 'Mitra tidak valid'
+            })
+        }
+
+        if(!allowedPaymentMethods.includes(paymentMethod)) {
+            return res.status(400).json({
+                message: 'Metode pembayaran tidak valid'
+            })
+        }
+
+        const mitra = await MitraModel.findById(mitraId).select('_id').lean()
+
+        if(!mitra) {
+            return res.status(404).json({
+                message: 'Mitra tidak ditemukan'
+            })
+        }
+
+        const sales = await MitraSalesModel.find({
+            mitraId: mitraId,
+            status: 'BELUM BAYAR'
+        }).lean()
+
+        if(!sales.length) {
+            return res.status(400).json({
+                message: 'Tidak ada tagihan Mitra yang belum dibayar'
+            })
+        }
+
+        const grandTotal = sales.reduce((sum, item) => {
+            return sum + Number(item.total || 0)
+        }, 0)
+
+        if(!Number.isFinite(grandTotal) || grandTotal <= 0) {
+            return res.status(400).json({
+                message: 'Total tagihan Mitra tidak valid'
+            })
+        }
+
+        let payment = {
+            cash: 0,
+            debit: 0,
+            transfer: 0,
+            bankId: null
+        }
+
+        if(paymentMethod === 'TUNAI') {
+            payment.cash = grandTotal
+        }
+
+        if(paymentMethod === 'DEBIT / CREDIT' || paymentMethod === 'TRANSFER BANK') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.bankId = bank._id
+
+            if(paymentMethod === 'DEBIT / CREDIT') {
+                payment.debit = grandTotal
+            }
+
+            if(paymentMethod === 'TRANSFER BANK') {
+                payment.transfer = grandTotal
+            }
+        }
+
+        if(paymentMethod === 'MULTI BAYAR') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            if(!Number.isFinite(cash) || cash <= 0 || cash >= grandTotal) {
+                return res.status(400).json({
+                    message: 'Jumlah pembayaran tunai harus lebih dari 0 dan kurang dari total tagihan'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.cash = cash
+            payment.transfer = grandTotal - cash
+            payment.bankId = bank._id
+        }
+
+        const date = new Date()
+        let dd = date.getDate()
+        let mm = date.getMonth() + 1
+        let yy = date.getFullYear().toString().substring(2)
+
+        dd = checkTime(dd)
+        mm = checkTime(mm)
+
+        function checkTime(i) {
+            if(i < 10) {
+                i = `0${i}`
+            }
+
+            return i
+        }
+
+        const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+
+        const lastPayment = await MitraPaymentModel.findOne({
+            createdAt: {$gte: today}
+        }).sort({createdAt: -1})
+
+        let paymentNo
+
+        if(lastPayment) {
+            const no = lastPayment.paymentNo.substring(16)
+            const newNo = parseInt(no) + 1
+            paymentNo = `${dd}${mm}/MTR/BYR/${yy}/${newNo}`
+        } else {
+            paymentNo = `${dd}${mm}/MTR/BYR/${yy}/1`
+        }
+
+        const paymentItems = sales.map(item => ({
+            productId: item.productId,
+            sku: item.sku,
+            name: item.name,
+            unitPrice: item.unitPrice,
+            qty: item.qty,
+            total: item.total
+        }))
+
+        const mitraPayment = new MitraPaymentModel({
+            paymentNo: paymentNo,
+            mitraId: mitraId,
+            items: paymentItems,
+            grandTotal: grandTotal,
+            paymentMethod: paymentMethod,
+            bankId: payment.bankId,
+            cash: payment.cash,
+            debit: payment.debit,
+            transfer: payment.transfer,
+            userId: userId
+        })
+
+        await mitraPayment.save()
+
+        const salesIds = sales.map(item => item._id)
+
+        const updateResult = await MitraSalesModel.updateMany(
+            {
+                _id: {$in: salesIds},
+                mitraId: mitraId,
+                status: 'BELUM BAYAR'
+            },
+            {
+                $set: {
+                    status: 'LUNAS'
+                }
+            }
+        )
+
+        const modifiedCount = updateResult.modifiedCount !== undefined
+            ? updateResult.modifiedCount
+            : updateResult.nModified
+
+        if(modifiedCount !== salesIds.length) {
+            await MitraPaymentModel.deleteOne({_id: mitraPayment._id})
+
+            return res.status(409).json({
+                message: 'Sebagian tagihan Mitra sudah berubah. Silakan ulangi pembayaran'
+            })
+        }
+
+        const mitraHistory = new MitraHistoryModel({
+            documentNo: paymentNo,
+            type: 'Bayar',
+            mitraId: mitraId,
+            shopId: shopId,
+            items: paymentItems,
+            grandTotal: grandTotal,
+            userId: userId
+        })
+
+        await mitraHistory.save()
+
+        res.status(200).json(mitraPayment)
+    } catch(err) {
+        console.error('mitraPayment error:', err)
+
+        res.status(400).json({
+            message: err.message || 'Pembayaran Mitra gagal diproses'
+        })
+    }
 }

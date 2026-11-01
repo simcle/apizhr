@@ -86,12 +86,18 @@ const supervisorInvetoryRoute = require('./src/routers/supervisor/inventory.rout
 const supervisorCashRoute = require('./src/routers/supervisor/cash.route')
 const supervisorDashboardRoute = require('./src/routers/supervisor/dashboard.route')
 
+// FINANCE API
+const financeRoutes = require('./src/routers/finance');
+
 app.use(
     '/api/supervisor/dead-stock',
     supervisorDeadStockRoute
 )
 
 app.use('/api/auth', userRoutes);
+
+// FINANCE
+app.use('/api/v1/finance', financeRoutes);
 
 // SUPERVISOR
 app.use('/api/supervisor/stock-opnames',  supervisorStockOpnameRoutes)
@@ -167,7 +173,7 @@ app.use('/setor', authenticateToken, setorRouter)
 app.use('/stock-order', stocOrderRouter)
 app.use('/report-absensi', reportAbsensiRouter)
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 mongoose.set("strictQuery", false);
 mongoose.connect(process.env.DATA_BASE, {
     autoIndex: true

@@ -27,8 +27,9 @@ const ResellerSchema = new Schema({
             paymentDate: {type: Date},
             paymentMethod: {type: String},
             bankId: {type: Schema.Types.ObjectId},
-            cash: {type: Number},
-            transfer: {type: Number},
+            cash: {type: Number, default: 0},
+            debit: {type: Number, default: 0},
+            transfer: {type: Number, default: 0},
             amount: {type: Number},
             sisa: {type: Number}
         }

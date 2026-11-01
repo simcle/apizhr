@@ -15,6 +15,11 @@ const MitraPaymentSchema = new Schema({
         }
     ],
     grandTotal: {type: Number},
+    paymentMethod: {type: String},
+    bankId: {type: Schema.Types.ObjectId},
+    cash: {type: Number, default: 0},
+    debit: {type: Number, default: 0},
+    transfer: {type: Number, default: 0},
     userId: {type: mongoose.Types.ObjectId}
 }, {
     timestamps: true

@@ -24,6 +24,11 @@ const NgolesSchema = new Schema({
     grandTotal: {type: Number},
     penerima: {type: String},
     tanggalBayar: {type: Date},
+    paymentMethod: {type: String},
+    bankId: {type: Schema.Types.ObjectId},
+    cash: {type: Number, default: 0},
+    debit: {type: Number, default: 0},
+    transfer: {type: Number, default: 0}
 }, {
     timestamps: true
 });

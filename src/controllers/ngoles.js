@@ -4,6 +4,7 @@ const NgolesModel = require('../models/ngoles');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const BankModel = require('../models/banks');
 
 exports.statNgoles = (req, res) => {
     const shopId = mongoose.Types.ObjectId(req.user.shopId)
@@ -208,21 +209,160 @@ exports.updateQty = (req, res) => {
     })
 }
 
-exports.bayarNgoles = (req, res) => {
-    const ngolesId = req.body._id
-    NgolesModel.findById(ngolesId)
-    .then(result => {
-        result.tanggalBayar = new Date()
-        result.status = 'LUNAS'
-        result.penerima = req.body.penerima
-        return result.save()
-    })
-    .then(result => {
+exports.bayarNgoles = async (req, res) => {
+    try {
+        const ngolesId = req.body._id
+        const penerima = req.body.penerima
+        const paymentMethod = req.body.paymentMethod
+        const bankId = req.body.bankId || null
+        const cash = Number(req.body.cash || 0)
+
+        const allowedPaymentMethods = [
+            'TUNAI',
+            'DEBIT / CREDIT',
+            'TRANSFER BANK',
+            'MULTI BAYAR'
+        ]
+
+        if(!mongoose.Types.ObjectId.isValid(ngolesId)) {
+            return res.status(400).json({
+                message: 'ID Ngoles tidak valid'
+            })
+        }
+
+        if(!penerima || !penerima.trim()) {
+            return res.status(400).json({
+                message: 'Nama penerima pembayaran harus diisi'
+            })
+        }
+
+        if(!allowedPaymentMethods.includes(paymentMethod)) {
+            return res.status(400).json({
+                message: 'Metode pembayaran tidak valid'
+            })
+        }
+
+        const ngoles = await NgolesModel.findById(ngolesId)
+
+        if(!ngoles) {
+            return res.status(404).json({
+                message: 'Transaksi Ngoles tidak ditemukan'
+            })
+        }
+
+        if(ngoles.status !== 'BELUM BAYAR') {
+            return res.status(400).json({
+                message: 'Transaksi Ngoles sudah dibayar atau dibatalkan'
+            })
+        }
+
+        const grandTotal = Number(ngoles.grandTotal || 0)
+
+        if(!Number.isFinite(grandTotal) || grandTotal <= 0) {
+            return res.status(400).json({
+                message: 'Total tagihan Ngoles tidak valid'
+            })
+        }
+
+        let payment = {
+            cash: 0,
+            debit: 0,
+            transfer: 0,
+            bankId: null
+        }
+
+        if(paymentMethod === 'TUNAI') {
+            payment.cash = grandTotal
+        }
+
+        if(paymentMethod === 'DEBIT / CREDIT' || paymentMethod === 'TRANSFER BANK') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.bankId = bank._id
+
+            if(paymentMethod === 'DEBIT / CREDIT') {
+                payment.debit = grandTotal
+            }
+
+            if(paymentMethod === 'TRANSFER BANK') {
+                payment.transfer = grandTotal
+            }
+        }
+
+        if(paymentMethod === 'MULTI BAYAR') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            if(!Number.isFinite(cash) || cash <= 0 || cash >= grandTotal) {
+                return res.status(400).json({
+                    message: 'Jumlah pembayaran tunai harus lebih dari 0 dan kurang dari total tagihan'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.cash = cash
+            payment.transfer = grandTotal - cash
+            payment.bankId = bank._id
+        }
+
+        const result = await NgolesModel.findOneAndUpdate(
+            {
+                _id: ngoles._id,
+                status: 'BELUM BAYAR'
+            },
+            {
+                $set: {
+                    status: 'LUNAS',
+                    tanggalBayar: new Date(),
+                    penerima: penerima.trim(),
+                    paymentMethod,
+                    bankId: payment.bankId,
+                    cash: payment.cash,
+                    debit: payment.debit,
+                    transfer: payment.transfer
+                }
+            },
+            {
+                new: true
+            }
+        )
+
+        if(!result) {
+            return res.status(409).json({
+                message: 'Transaksi Ngoles sudah diproses'
+            })
+        }
+
         res.status(200).json(result)
-    })
-    .catch(err => [
-        res.status(400).send(err)
-    ])
+    } catch(err) {
+        console.error('bayarNgoles error:', err)
+
+        res.status(400).json({
+            message: err.message || 'Pembayaran Ngoles gagal diproses'
+        })
+    }
 }
 
 exports.cancelNgoles = (req, res) => {

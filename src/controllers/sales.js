@@ -7,7 +7,85 @@ const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
 const OutletModel = require('../models/shops');
+const BankModel = require('../models/banks');
 const excel = require('exceljs');
+
+const PAYMENT_METHODS = ['TUNAI', 'DEBIT / CREDIT', 'TRANSFER BANK', 'MULTI BAYAR'];
+
+async function resolvePayment(body, grandTotal) {
+    const paymentMethod = body.paymentMethod;
+
+    if(!PAYMENT_METHODS.includes(paymentMethod)) {
+        throw new Error('Metode pembayaran tidak valid');
+    }
+
+    if(!Number.isFinite(grandTotal) || grandTotal <= 0) {
+        throw new Error('Total pembayaran tidak valid');
+    }
+
+    let bankId = null;
+    let cash = 0;
+    let debit = 0;
+    let transfer = 0;
+    let bayar = grandTotal;
+    let kembali = 0;
+
+    if(paymentMethod === 'TUNAI') {
+        bayar = Number(body.bayar);
+
+        if(!Number.isFinite(bayar) || bayar < grandTotal) {
+            throw new Error('Jumlah pembayaran tunai tidak mencukupi');
+        }
+
+        cash = grandTotal;
+        kembali = bayar - grandTotal;
+    }
+
+    if(paymentMethod === 'DEBIT / CREDIT') {
+        bankId = await resolveBank(body.bankId);
+        debit = grandTotal;
+    }
+
+    if(paymentMethod === 'TRANSFER BANK') {
+        bankId = await resolveBank(body.bankId);
+        transfer = grandTotal;
+    }
+
+    if(paymentMethod === 'MULTI BAYAR') {
+        bankId = await resolveBank(body.bankId);
+        cash = Number(body.cash);
+
+        if(!Number.isFinite(cash) || cash <= 0 || cash >= grandTotal) {
+            throw new Error('Pembayaran tunai untuk Multi Bayar harus lebih dari 0 dan kurang dari total pembayaran');
+        }
+
+        transfer = grandTotal - cash;
+    }
+
+    return {
+        paymentMethod,
+        bankId,
+        cash,
+        debit,
+        transfer,
+        bayar,
+        kembali
+    };
+}
+
+async function resolveBank(bankId) {
+    if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+        throw new Error('Bank pembayaran tidak valid');
+    }
+
+    const bank = await BankModel.findById(bankId).select('_id').lean();
+
+    if(!bank) {
+        throw new Error('Bank pembayaran tidak ditemukan');
+    }
+
+    return bank._id;
+}
 
 exports.getOutlet = (req, res) => {
     OutletModel.find().lean()
@@ -415,114 +493,153 @@ exports.deleteDraft = (req, res) => {
 }
 
 exports.insertSales = async (req, res) => {
-    const shopId = req.user.shopId
-    const userId = req.user._id
-    const draftId = req.body.draftId
-    const date = new Date();
-    let dd = date.getDate();
-    let mm = date.getMonth() +1;
-    let yy = date.getFullYear().toString().substring(2);
-    dd = checkTime(dd);
-    mm = checkTime(mm)
-    function checkTime (i) {
-        if(i < 10) {
-            i = `0${i}`
-        }
-        return i
-    }
-    let today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    let sales = await SalesModel.findOne({createdAt: {$gte: today}}).sort({createdAt: -1})
-    let salesNo;
-    if(sales) {
-        const no = sales.salesNo.substring(16)
-        const newNo = parseInt(no)+1
-        salesNo = `${dd}${mm}/ZHR/POS/${yy}/${newNo}`
-    } else {
-        salesNo = `${dd}${mm}/ZHR/POS/${yy}/1`
-    }
-    sales = new SalesModel({
-        salesNo: salesNo,
-        shopId: shopId,
-        items: req.body.items,
-        grandTotal: req.body.grandTotal,
-        paymentMethod: req.body.paymentMethod,
-        bankId: req.body.bankId,
-        cash: req.body.cash,
-        transfer: req.body.transfer,
-        debit: req.body.debit,
-        bayar: req.body.bayar,
-        kembali: req.body.kembali,
-        userId: userId
-    })
-    sales.save()
-    .then( async (result) => {
-        if(draftId) {
-            await DraftSalesModel.deleteOne({_id: draftId})
-        }
-        let documentId = result._id
-        const items = result.items
-        for(let i = 0; i < items.length; i ++) {
-            const item = items[i]
-            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
-            if(inventory) {
-                inventory.qty = inventory.qty - item.qty
-                await inventory.save()
-            } else {
-                await InventoryModel.create({shopId: shopId, productId: item.productId, qty: 0})
+    try {
+        const shopId = req.user.shopId;
+        const userId = req.user._id;
+        const draftId = req.body.draftId;
+        const grandTotal = Number(req.body.grandTotal);
+
+        const payment = await resolvePayment(req.body, grandTotal);
+
+        const date = new Date();
+        let dd = date.getDate();
+        let mm = date.getMonth() + 1;
+        let yy = date.getFullYear().toString().substring(2);
+
+        dd = checkTime(dd);
+        mm = checkTime(mm);
+
+        function checkTime(i) {
+            if(i < 10) {
+                i = `0${i}`;
             }
-            const balance = await updateStock(item.productId)
-            await stockCard('out', shopId, item.productId, documentId, 'Penjualan', item.qty, balance.stock)
+            return i;
         }
-        res.status(200).json(result)
-    })
-    .catch(err => {
-        res.status(400).send(err)
-    })
-}
+
+        const today = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        let sales = await SalesModel.findOne({createdAt: {$gte: today}}).sort({createdAt: -1});
+        let salesNo;
+
+        if(sales) {
+            const no = sales.salesNo.substring(16);
+            const newNo = parseInt(no) + 1;
+            salesNo = `${dd}${mm}/ZHR/POS/${yy}/${newNo}`;
+        } else {
+            salesNo = `${dd}${mm}/ZHR/POS/${yy}/1`;
+        }
+
+        sales = new SalesModel({
+            salesNo,
+            shopId,
+            items: req.body.items,
+            grandTotal,
+            paymentMethod: payment.paymentMethod,
+            bankId: payment.bankId,
+            cash: payment.cash,
+            transfer: payment.transfer,
+            debit: payment.debit,
+            bayar: payment.bayar,
+            kembali: payment.kembali,
+            userId
+        });
+
+        const result = await sales.save();
+
+        if(draftId) {
+            await DraftSalesModel.deleteOne({_id: draftId});
+        }
+
+        const documentId = result._id;
+        const items = result.items;
+
+        for(let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]});
+
+            if(inventory) {
+                inventory.qty = inventory.qty - item.qty;
+                await inventory.save();
+            } else {
+                await InventoryModel.create({shopId: shopId, productId: item.productId, qty: 0});
+            }
+
+            const balance = await updateStock(item.productId);
+            await stockCard('out', shopId, item.productId, documentId, 'Penjualan', item.qty, balance.stock);
+        }
+
+        res.status(200).json(result);
+    } catch(err) {
+        console.error('insertSales error:', err);
+        res.status(400).json({message: err.message || 'Penjualan gagal diproses'});
+    }
+};
 
 exports.updateSales = async (req, res) => {
-    const salesId = req.body._id
-    const original = req.body.originalItems
-    const shopId = req.user.shopId
-    for(let i = 0; i < original.length; i++) {
-        const item = original[i]
-        const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
-        inventory.qty += item.qty
-        await inventory.save()
-        const balance = await updateStock(mongoose.Types.ObjectId(item.productId))
-        await stockCard('in', shopId, item.productId, salesId, 'Edit penjualan', item.qty, balance.stock)
-    }
-    SalesModel.findById(salesId)
-    .then(sale => {
-        sale.items = req.body.items
-        sale.grandTotal = req.body.grandTotal
-        sale.paymentMethod = req.body.paymentMethod
-        sale.bankId = req.body.bankId
-        sale.cash = req.body.cash
-        sale.transfer = req.body.transfer
-        sale.debit = req.body.debit
-        sale.bayar = req.body.bayar
-        sale.kembali = req.body.kembali
-        return sale.save()
-    })
-    .then( async (result) => {
-        let documentId = result._id
-        const items = result.items
-        for(let i = 0; i < items.length; i ++) {
-            const item = items[i]
-            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]})
-            if(inventory) {
-                inventory.qty = inventory.qty - item.qty
-                await inventory.save()
-            } else {
-                await InventoryModel.create({shopId: shopId, productId: item.productId, qty: 0})
-            }
-            const balance = await updateStock(item.productId)
-            await stockCard('out', shopId, item.productId, documentId, 'Update penjualan', item.qty, balance.stock)
+    try {
+        const salesId = req.body._id;
+        const original = req.body.originalItems;
+        const shopId = req.user.shopId;
+        const grandTotal = Number(req.body.grandTotal);
+
+        if(!salesId || !mongoose.Types.ObjectId.isValid(salesId)) {
+            return res.status(400).json({message: 'Transaksi penjualan tidak valid'});
         }
-        res.status(200).json(result)
-    })
-    .catch(err => {
-        res.status(400).send(err)
-    })
-}
+
+        const payment = await resolvePayment(req.body, grandTotal);
+
+        for(let i = 0; i < original.length; i++) {
+            const item = original[i];
+            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]});
+
+            if(!inventory) {
+                throw new Error(`Inventory produk ${item.productId} tidak ditemukan`);
+            }
+
+            inventory.qty += item.qty;
+            await inventory.save();
+
+            const balance = await updateStock(mongoose.Types.ObjectId(item.productId));
+            await stockCard('in', shopId, item.productId, salesId, 'Edit penjualan', item.qty, balance.stock);
+        }
+
+        const sale = await SalesModel.findById(salesId);
+
+        if(!sale) {
+            return res.status(404).json({message: 'Transaksi penjualan tidak ditemukan'});
+        }
+
+        sale.items = req.body.items;
+        sale.grandTotal = grandTotal;
+        sale.paymentMethod = payment.paymentMethod;
+        sale.bankId = payment.bankId;
+        sale.cash = payment.cash;
+        sale.transfer = payment.transfer;
+        sale.debit = payment.debit;
+        sale.bayar = payment.bayar;
+        sale.kembali = payment.kembali;
+
+        const result = await sale.save();
+        const documentId = result._id;
+        const items = result.items;
+
+        for(let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const inventory = await InventoryModel.findOne({$and: [{shopId: shopId}, {productId: item.productId}]});
+
+            if(inventory) {
+                inventory.qty = inventory.qty - item.qty;
+                await inventory.save();
+            } else {
+                await InventoryModel.create({shopId: shopId, productId: item.productId, qty: 0});
+            }
+
+            const balance = await updateStock(item.productId);
+            await stockCard('out', shopId, item.productId, documentId, 'Update penjualan', item.qty, balance.stock);
+        }
+
+        res.status(200).json(result);
+    } catch(err) {
+        console.error('updateSales error:', err);
+        res.status(400).json({message: err.message || 'Penjualan gagal diperbarui'});
+    }
+};

@@ -4,6 +4,7 @@ const ResellerModel = require('../models/reseller');
 const InventoryModel = require('../models/inventory');
 const updateStock = require('../modules/updateStock');
 const stockCard = require('../modules/stockCard');
+const BankModel = require('../models/banks');
 
 exports.statReseller = (req, res ) => {
     const shopId = mongoose.Types.ObjectId(req.user.shopId)
@@ -216,47 +217,152 @@ exports.getSeller = (req, res) => {
     })
 }
 
-exports.bayarReseller = (req, res) => {
-    const resellerId = req.params.resellerId
-    const paymentMethod = req.body.paymentMethod
-    const bankId = req.body.bankId
-    const bayar = req.body.bayar
-    const cash = req.body.cash
-    const transfer = req.body.transfer
-    ResellerModel.findById(resellerId)
-    .then(reseller => {
-        const sisa = reseller.sisa - bayar
-        if(paymentMethod == 'TUNAI') {
-            reseller.payments.push({
-                paymentDate: new Date(),
-                paymentMethod: paymentMethod,
-                amount: bayar,
-                sisa: sisa
-            })
-        } else {
-            reseller.payments.push({
-                paymentDate: new Date(),
-                paymentMethod: paymentMethod,
-                bankId: bankId,
-                cash: cash,
-                transfer: transfer,
-                amount: bayar,
-                sisa: sisa
+exports.bayarReseller = async (req, res) => {
+    try {
+        const resellerId = req.params.resellerId
+        const paymentMethod = req.body.paymentMethod
+        const bankId = req.body.bankId || null
+        const bayar = Number(req.body.bayar || 0)
+        const cash = Number(req.body.cash || 0)
+
+        const allowedPaymentMethods = [
+            'TUNAI',
+            'DEBIT / CREDIT',
+            'TRANSFER BANK',
+            'MULTI BAYAR'
+        ]
+
+        if(!mongoose.Types.ObjectId.isValid(resellerId)) {
+            return res.status(400).json({
+                message: 'Transaksi Reseller tidak valid'
             })
         }
-        reseller.bayar += bayar
+
+        if(!allowedPaymentMethods.includes(paymentMethod)) {
+            return res.status(400).json({
+                message: 'Metode pembayaran tidak valid'
+            })
+        }
+
+        if(!Number.isFinite(bayar) || bayar <= 0) {
+            return res.status(400).json({
+                message: 'Jumlah pembayaran harus lebih dari 0'
+            })
+        }
+
+        const reseller = await ResellerModel.findById(resellerId)
+
+        if(!reseller) {
+            return res.status(404).json({
+                message: 'Transaksi Reseller tidak ditemukan'
+            })
+        }
+
+        const currentSisa = Number(reseller.sisa || 0)
+
+        if(reseller.status === true || currentSisa <= 0) {
+            return res.status(400).json({
+                message: 'Transaksi Reseller sudah lunas'
+            })
+        }
+
+        if(bayar > currentSisa) {
+            return res.status(400).json({
+                message: 'Jumlah pembayaran melebihi sisa tagihan'
+            })
+        }
+
+        const payment = {
+            cash: 0,
+            debit: 0,
+            transfer: 0,
+            bankId: null
+        }
+
+        if(paymentMethod === 'TUNAI') {
+            payment.cash = bayar
+        }
+
+        if(paymentMethod === 'DEBIT / CREDIT' || paymentMethod === 'TRANSFER BANK') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.bankId = bank._id
+
+            if(paymentMethod === 'DEBIT / CREDIT') {
+                payment.debit = bayar
+            }
+
+            if(paymentMethod === 'TRANSFER BANK') {
+                payment.transfer = bayar
+            }
+        }
+
+        if(paymentMethod === 'MULTI BAYAR') {
+            if(!bankId || !mongoose.Types.ObjectId.isValid(bankId)) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan harus dipilih'
+                })
+            }
+
+            if(!Number.isFinite(cash) || cash <= 0 || cash >= bayar) {
+                return res.status(400).json({
+                    message: 'Jumlah pembayaran tunai harus lebih dari 0 dan kurang dari jumlah pembayaran'
+                })
+            }
+
+            const bank = await BankModel.findById(bankId).select('_id').lean()
+
+            if(!bank) {
+                return res.status(400).json({
+                    message: 'Rekening tujuan tidak ditemukan'
+                })
+            }
+
+            payment.cash = cash
+            payment.transfer = bayar - cash
+            payment.bankId = bank._id
+        }
+
+        const sisa = currentSisa - bayar
+        const currentBayar = Number(reseller.bayar || 0)
+
+        reseller.payments.push({
+            paymentDate: new Date(),
+            paymentMethod: paymentMethod,
+            bankId: payment.bankId,
+            cash: payment.cash,
+            debit: payment.debit,
+            transfer: payment.transfer,
+            amount: bayar,
+            sisa: sisa
+        })
+
+        reseller.bayar = currentBayar + bayar
         reseller.sisa = sisa
-        if(sisa == 0) {
-            reseller.status = true
-        }
-        return reseller.save()
-    })
-    .then(result => {
+        reseller.status = sisa === 0
+
+        const result = await reseller.save()
+
         res.status(200).json(result)
-    })
-    .catch(err => {
-        res.status(400).send(err)
-    })
+    } catch(err) {
+        console.error('bayarReseller error:', err)
+
+        res.status(400).json({
+            message: err.message || 'Pembayaran Reseller gagal diproses'
+        })
+    }
 }
 
 exports.insertSeller = (req, res) => {
