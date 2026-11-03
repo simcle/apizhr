@@ -3,7 +3,7 @@ const SalesModel = require('../models/sales');
 const PengeluaranModel = require('../models/pengeluaran');
 const MitraPaymentModel = require('../models/mitraPayment');
 const mongoose = require('mongoose')
-exports.getSetor = (req, res) => {
+exports.getSetor = async (req, res) => {
     const date = new Date()
     const today = new Date(date.getFullYear(), date.getMonth(), date.getDate())
     const totalTunai = SalesModel.aggregate([
@@ -24,14 +24,22 @@ exports.getSetor = (req, res) => {
     const totalSetor = SetorModel.aggregate([
         {$match: {createdAt: {$gte: today}}},
     ])
-    const mitra = MitraPaymentModel.aggregate([
-        {$match: {createdAt: {$gte: today}}},
-        {$unwind: '$items'},
-        {$group: {
-            _id: null,
-            total: {$sum: '$items.total'}
-        }},
-    ])
+    const mitra = await MitraPaymentModel.aggregate([
+        { $match: { createdAt: { $gte: today } } },
+        { $unwind: '$items' },
+        {
+            $group: {
+                _id: null,
+                total: {
+                    $sum: {
+                        $multiply: ['$items.unitPrice', '$items.qty']
+                    }
+                }
+            }
+        }
+    ]);
+
+    const total = mitra[0]?.total ?? 0;
     Promise.all([
         totalTunai,
         totalPengeluaran,
@@ -112,7 +120,11 @@ exports.getLaporan = (req, res) => {
         {$unwind: '$items'},
         {$group: {
             _id: '$mitraId',
-            total: {$sum: '$items.total'}
+            total: {
+                $sum: {
+                    $multiply: ['$items.unitPrice', '$items.qty']
+                }
+            }
         }},
         {$lookup: {
             from: 'mitras',

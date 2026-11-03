@@ -277,7 +277,7 @@ exports.mitraPayment = async (req, res) => {
         }
 
         const grandTotal = sales.reduce((sum, item) => {
-            return sum + Number(item.unitPrice || 0)
+            return sum + Number(item.unitPrice * item.qty || 0)
         }, 0)
 
         if(!Number.isFinite(grandTotal) || grandTotal <= 0) {
