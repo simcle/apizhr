@@ -1,3 +1,4 @@
+
 const express = require('express')
 const router = express.Router()
 
@@ -38,10 +39,30 @@ router.get(
     controller.getByShop
 )
 
+
+/*
+|--------------------------------------------------------------------------
+| HISTORY
+|--------------------------------------------------------------------------
+*/
+
 router.get(
     '/history',
     controller.getHistory
 )
+
+
+/*
+|--------------------------------------------------------------------------
+| REPORTING
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+    '/report',
+    controller.getReport
+)
+
 
 /*
 |--------------------------------------------------------------------------
@@ -52,6 +73,12 @@ router.get(
 router.get(
     '/:id',
     controller.getDetail
+)
+
+
+router.get(
+    '/report/pdf',
+    controller.downloadReportPdf
 )
 
 

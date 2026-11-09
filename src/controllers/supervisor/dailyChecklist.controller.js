@@ -8,6 +8,10 @@ const {
     completeChecklist
 } = require('../../services/supervisor/dailyChecklist.service')
 
+const {
+    getDailyChecklistReport
+} = require('../../services/supervisor/dailyChecklistReport.service')
+
 
 function handleError(res, error) {
     console.error(error)
@@ -22,7 +26,6 @@ function handleError(res, error) {
                 : 'Terjadi kesalahan pada server'
     })
 }
-
 
 /*
  * GET /api/supervisor/daily-checklist
@@ -238,5 +241,57 @@ exports.getHistory = async (req, res) => {
             res,
             error
         )
+    }
+}
+
+exports.getReport = async (req, res) => {
+    try {
+        const result = await getDailyChecklistReport({
+            startDate: req.query.startDate || null,
+            endDate: req.query.endDate || null,
+            shopId: req.query.shopId || null
+        })
+
+        return res.status(200).json({
+            status: true,
+            data: result
+        })
+    } catch (error) {
+        return handleError(res, error)
+    }
+}
+
+
+exports.downloadReportPdf = async (req, res) => {
+    try {
+        const params = {
+            startDate: req.query.startDate || null,
+            endDate: req.query.endDate || null,
+            shopId: req.query.shopId || null
+        }
+
+        const report = await getDailyChecklistReport(params)
+
+        // Generator harus menggunakan data report yang sama
+        // dengan endpoint /report agar seluruh KPI konsisten.
+        const { generateDailyChecklistPdf } =
+            require('../../services/supervisor/dailyChecklistPdf.service')
+
+        const pdfBuffer = await generateDailyChecklistPdf(report)
+
+        const filename =
+            `ZHR-Daily-Checklist-${report.period.startDate}` +
+            `-${report.period.endDate}.pdf`
+
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${filename}"`
+        )
+        res.setHeader('Content-Length', pdfBuffer.length)
+
+        return res.status(200).end(pdfBuffer)
+    } catch (error) {
+        return handleError(res, error)
     }
 }
