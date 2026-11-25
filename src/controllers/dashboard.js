@@ -106,8 +106,8 @@ exports.getDashboard = (req, res) => {
         {$match: {createdAt: {$gte: sevenDay}}},
         // {$match: {$and: [{createdAt: {$gte: start}}, {createdAt: {$lte: end}}]}},
         {$group: {
-            _id: {tanggal: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},
-            tanggal: {$first: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt'}}},
+            _id: {tanggal: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt', timezone: "Asia/Jakarta"}}},
+            tanggal: {$first: {$dateToString: {format: "%Y-%m-%d", date: '$createdAt', timezone: "Asia/Jakarta"}}},
             total: {$sum: '$grandTotal'}
         }},
         {$sort: {'_id.tanggal': 1}},
